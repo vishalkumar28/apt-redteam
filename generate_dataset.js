@@ -1,0 +1,1280 @@
+const fs = require('fs');
+
+// We will construct the complete dataset for APT//REDTEAM
+console.log("Generating APT//REDTEAM dataset...");
+
+const phasesRaw = [
+  {
+    name: "Phase 0 · Technical foundations",
+    period: "Months 1–4",
+    goal: "Understand how computers, operating systems and networks actually work before studying advanced security.",
+    modules: [
+      {
+        id: "mod-01",
+        num: "01",
+        title: "Computer Architecture and OS Internals",
+        whyMatters: "Understand CPU, memory, processes, kernel and system calls. This makes malware analysis, exploit research and forensics intelligible.",
+        topicsStr: "CPU architecture; Von Neumann and Harvard models; ALU, control unit and registers; instruction cycle; ISA; x86/x64 and ARM overview; binary, hexadecimal and endianness; RAM and cache; stack and heap; virtual memory, paging and page tables; MMU; interrupts; user mode and kernel mode; system calls; processes and threads; scheduling and context switching; IPC; filesystems; drivers; boot process; BIOS/UEFI; Secure Boot and TPM.",
+        booksStr: "OSTEP chapters: processes, process API, direct execution, scheduling, address spaces, memory API, address translation, paging, TLBs, concurrency and file systems. OST2: architecture and x86-64 foundations. Microsoft Sysinternals: Process Explorer, Process Monitor and Autoruns.",
+        coursesStr: "Hackers-Arise: Getting Started Becoming a Master Hacker (orientation only). OST2: architecture and assembly foundations. HTB Academy: relevant OS and information-security foundation modules.",
+        practicalStr: "Draw CPU and OS diagrams; inspect process trees with Process Explorer and Linux ps; observe file/process activity with Procmon; use strace on a benign Linux process; explain virtual memory and user/kernel transitions.",
+        deliverable: "A labelled architecture diagram, process lifecycle diagram, notes and a short comparison of Windows and Linux process behaviour.",
+        urls: [
+          { name: "OSTEP", url: "https://pages.cs.wisc.edu/~remzi/OSTEP/" },
+          { name: "OpenSecurityTraining2", url: "https://ost2.fyi/" },
+          { name: "Sysinternals", url: "https://learn.microsoft.com/en-us/sysinternals/" }
+        ],
+        tools: ["Process Explorer", "Procmon", "Autoruns", "strace", "ltrace", "htop"],
+        commands: [
+          { cmd: "strace -f -e trace=file,process,network ./binary", desc: "Trace file, process, and socket system calls" },
+          { cmd: "cat /proc/cpuinfo | grep -E 'model name|flags'", desc: "Inspect CPU microarchitecture and flags" },
+          { cmd: "cat /proc/[PID]/maps", desc: "View virtual memory regions, memory protections, and mapped files" },
+          { cmd: "Get-Process | Sort-Object WorkingSet64 -Descending | Select -First 10", desc: "View top 10 memory-consuming processes" },
+          { cmd: "procmon.exe /AcceptEula /Quiet /BackingFile C:\\temp\\trace.pml", desc: "Headless Sysinternals Procmon capture" }
+        ],
+        subtopics: [
+          { title: "CPU Microarchitecture & Registers", detail: "General purpose registers (RAX, RBX, RCX, RDX, RSI, RDI, RSP, RBP, R8-R15), RIP, instruction cycle (Fetch, Decode, Execute, Writeback)." },
+          { title: "Virtual Memory & MMU Paging", detail: "Paging structures (PML4, PDPT, PD, PT), Page Table Entries (PTE), CR3 register, Translation Lookaside Buffer (TLB), Page Faults (#PF)." },
+          { title: "Process & Thread Execution Lifecycle", detail: "EPROCESS / task_struct, threads, context switching overhead, Thread Local Storage (TLS), kernel/user mode transitions via SYSCALL." }
+        ],
+        knowledgeAssessment: [
+          "Explain the difference between a physical address and a virtual address.",
+          "What happens during a context switch between two threads in different processes?",
+          "How does the CPU transition from User Mode (Ring 3) to Kernel Mode (Ring 0)?",
+          "What security boundary does the MMU enforce?"
+        ]
+      },
+      {
+        id: "mod-02",
+        num: "02",
+        title: "Networking and Protocol Internals",
+        whyMatters: "Learn how systems communicate and how to read network evidence. This supports reconnaissance, APT infrastructure analysis, incident response and network testing.",
+        topicsStr: "OSI and TCP/IP; Ethernet and MAC; ARP; IPv4/IPv6; subnetting and CIDR; routing and switching; NAT; VLAN; ICMP; TCP and UDP; ports and sockets; TCP handshake and teardown; DNS; DHCP; HTTP/1.1, HTTP/2 and HTTP/3; TLS handshake and certificates; SMTP, IMAP and POP3; SSH, RDP, SMB, LDAP, Kerberos, NTP and SNMP; proxies and VPNs; packet headers; fragmentation; PCAP; flow data; Zeek and Suricata telemetry.",
+        booksStr: "Computer Networking: A Top-Down Approach: Internet, application, transport, network and link layers, wireless networks and network security. Read relevant RFCs when studying a protocol.",
+        coursesStr: "Hackers-Arise: Network Basics for Hackers; Nmap for Hackers. HTB Academy: Networking Fundamentals and relevant enumeration modules. TryHackMe: Pre Security networking content.",
+        practicalStr: "Use Wireshark to inspect DNS, TCP handshake, TLS and HTTP; analyse supplied PCAPs; map a small private lab network; compare packet evidence with Zeek logs.",
+        deliverable: "20 annotated packet captures or protocol notes, subnetting exercises and a network diagram.",
+        urls: [
+          { name: "RFC Editor", url: "https://www.rfc-editor.org/" },
+          { name: "Wireshark Docs", url: "https://www.wireshark.org/docs/" },
+          { name: "Cloudflare Learning", url: "https://www.cloudflare.com/learning/" },
+          { name: "HTB Academy", url: "https://academy.hackthebox.com/catalogue/paths" }
+        ],
+        tools: ["Wireshark", "tshark", "tcpdump", "Zeek", "Suricata", "Nmap"],
+        commands: [
+          { cmd: "tcpdump -i eth0 -nn -s0 -w capture.pcap 'port 53 or port 80 or port 443'", desc: "Capture DNS and web traffic without truncating packets" },
+          { cmd: "tshark -r capture.pcap -q -z conv,ip", desc: "Display IP conversation statistics from PCAP" },
+          { cmd: "tshark -r capture.pcap -Y 'dns.flags.response == 0' -T fields -e dns.qry.name", desc: "Extract all DNS queries made in capture" },
+          { cmd: "zeek -r capture.pcap", desc: "Generate protocol-specific structured Zeek log files" },
+          { cmd: "openssl s_client -connect target.com:443 -showcerts", desc: "Inspect TLS handshake and certificate chain details" }
+        ],
+        subtopics: [
+          { title: "Layer 2 & Layer 3 Internals", detail: "Ethernet framing, ARP poisoning mechanisms, IPv4 header flags and fragmentation, IPv6 SLAAC and routing tables." },
+          { title: "Transport Layer: TCP vs UDP", detail: "3-way handshake (SYN, SYN-ACK, ACK), sequence numbers, sliding windows, retransmission, 4-way teardown (FIN/RST), UDP socket mechanics." },
+          { title: "Application Protocols & Telemetry", detail: "DNS record types (A, AAAA, CNAME, TXT, MX), HTTP/1.1 keep-alive vs HTTP/2 multiplexing, TLS 1.3 handshake cryptographic exchanges." }
+        ],
+        knowledgeAssessment: [
+          "Describe how TCP sequence numbers prevent blind packet injection.",
+          "What is the difference between ARP spoofing and DNS cache poisoning?",
+          "How does SNI (Server Name Indication) in TLS handshakes leak hostnames?",
+          "What information does a NetFlow / IPFIX flow record contain compared to full packet capture?"
+        ]
+      },
+      {
+        id: "mod-03",
+        num: "03",
+        title: "Linux Internals and Administration",
+        whyMatters: "Build Linux administration and internals knowledge for system security, malware research, incident response and authorised infrastructure assessment.",
+        topicsStr: "Distributions and kernel/user space; filesystem hierarchy; shell and Bash; users and groups; ownership, permissions and ACLs; sudo; packages; systemd; processes, jobs and signals; cron; environment variables; /proc and /sys; system calls; ELF; shared libraries and dynamic linking; PAM; SSH; capabilities; namespaces and cgroups; networking; nftables and iptables; auditd and journald; AppArmor and SELinux; kernel modules; containers; hardening and log review.",
+        booksStr: "Linux Journey for basics; The Linux Command Line for shell and filesystem; Linux kernel documentation for internals; Bash manual for scripting. Read about permissions, process management, services, logs and namespaces.",
+        coursesStr: "Hackers-Arise: Linux Basics for Hackers, Linux Firewalls, Advanced Linux for Hackers and Privilege Escalation. HTB Academy: Linux Fundamentals and Linux Privilege Escalation. TryHackMe: Linux Fundamentals.",
+        practicalStr: "Build one Linux VM; practise users, permissions, services, SSH, firewall, logs, process inspection and safe system auditing. Use strace on benign programs.",
+        deliverable: "Linux administration notebook, hardening checklist and a small system-audit script.",
+        urls: [
+          { name: "Linux Journey", url: "https://linuxjourney.com/" },
+          { name: "The Linux Command Line", url: "https://linuxcommand.org/tlcl.php" },
+          { name: "Linux Kernel Docs", url: "https://www.kernel.org/doc/html/latest/" },
+          { name: "Bash Manual", url: "https://www.gnu.org/software/bash/manual/" }
+        ],
+        tools: ["systemctl", "journalctl", "auditctl", "ss", "nftables", "getfacl / setfacl", "readelf"],
+        commands: [
+          { cmd: "find / -perm -4000 -type f 2>/dev/null", desc: "Locate all SUID binaries on filesystem" },
+          { cmd: "getcap -r / 2>/dev/null", desc: "Find all binaries with Linux file capabilities set" },
+          { cmd: "journalctl -u sshd.service --since '2 hours ago'", desc: "Inspect systemd journal logs for SSH daemon" },
+          { cmd: "ss -tulpn", desc: "List all listening TCP and UDP sockets with owning process IDs" },
+          { cmd: "readelf -h -l /bin/ls", desc: "Inspect ELF file header and program load headers" }
+        ],
+        subtopics: [
+          { title: "Linux Privilege Model & DAC/MAC", detail: "POSIX user/group permissions, SUID/SGID bits, ACLs, Linux Capabilities (cap_net_raw, cap_sys_admin), SELinux contexts and AppArmor profiles." },
+          { title: "Systemd, Daemons & Service Isolation", detail: "Unit files, dependencies, target states, cgroups v2 resource limiting, mount namespaces and container isolation." },
+          { title: "Kernel / User Space Interface & Telemetry", detail: "/proc virtual filesystem, /sys hardware tree, auditd syscall logging, eBPF tracing probes." }
+        ],
+        knowledgeAssessment: [
+          "Explain the difference between SUID root and granting a capability like CAP_SETUID.",
+          "How does systemd journald correlate log entries with specific unit files?",
+          "What is the function of the /proc/sys/kernel/randomize_va_space knob?",
+          "Explain how Pluggable Authentication Modules (PAM) handle authentication chains."
+        ]
+      },
+      {
+        id: "mod-04",
+        num: "04",
+        title: "Windows Internals and Administration",
+        whyMatters: "Understand Windows processes, security boundaries, registry, authentication and telemetry. This is essential for enterprise APT and AD work.",
+        topicsStr: "Windows architecture and boot; kernel and executive; user/kernel mode; processes, threads, handles and tokens; SIDs; ACL, DACL and SACL; registry; services; NTFS and ADS; SAM and LSA concepts; LSASS security; authentication; Event Logs; ETW; Sysmon; PowerShell; WMI and CIM; Task Scheduler; Defender; firewall; AppLocker and WDAC; DLL loading; PE format; memory management; Windows auditing and hardening.",
+        booksStr: "Windows Internals, Parts 1 and 2: system architecture, processes/threads, memory, security, I/O and storage. Microsoft Learn: Windows security, Sysinternals, PowerShell and event logging.",
+        coursesStr: "Hackers-Arise: PowerShell for Hackers. HTB Academy: Windows Fundamentals and Windows Privilege Escalation foundations. TryHackMe: Windows fundamentals rooms.",
+        practicalStr: "Install Sysmon on a Windows VM; inspect Event Viewer; use Process Explorer, Autoruns and Process Monitor; review PowerShell logs and Windows security settings.",
+        deliverable: "Windows internals notebook, Sysmon configuration and an event-investigation report.",
+        urls: [
+          { name: "Windows Documentation", url: "https://learn.microsoft.com/en-us/windows/" },
+          { name: "Sysinternals", url: "https://learn.microsoft.com/en-us/sysinternals/" },
+          { name: "PowerShell Docs", url: "https://learn.microsoft.com/en-us/powershell/" }
+        ],
+        tools: ["Process Explorer", "Procmon", "Autoruns", "Sysmon", "wevtutil", "fltmc", "dumpbin"],
+        commands: [
+          { cmd: "Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Sysmon/Operational'; ID=1} -MaxEvents 10", desc: "Query Sysmon Process Creation events (Event ID 1)" },
+          { cmd: "whoami /all", desc: "Display current user SID, security group memberships, and token privileges" },
+          { cmd: "wevtutil qe Security \"/q:*[System[(EventID=4624)]]\" /f:text /c:5", desc: "Query Windows Security Event Log for recent successful logons" },
+          { cmd: "sc.exe qc LanmanServer", desc: "Inspect Windows service binary path, startup type, and service account" },
+          { cmd: "Get-Item -Path C:\\file.txt -Stream *", desc: "Detect Alternate Data Streams (ADS) on NTFS files" }
+        ],
+        subtopics: [
+          { title: "Windows Access Tokens & Integrity Levels", detail: "Primary vs Impersonation tokens, Token Privileges (SeDebugPrivilege, SeImpersonatePrivilege), Integrity Levels (Untrusted, Low, Medium, High, System), Token Stealing concepts." },
+          { title: "Object Manager & Security Descriptors", detail: "Executive objects, handles, Security Identifiers (SIDs), Discretionary ACL (DACL), System ACL (SACL), Access Mask calculation." },
+          { title: "PE Structure & DLL Search Order", detail: "DOS Header, NT Headers, Section Headers (.text, .data, .rsrc, .reloc), Import/Export Address Tables (IAT/EAT), DLL search order hijacking." }
+        ],
+        knowledgeAssessment: [
+          "What is the difference between a DACL and a SACL in a Windows Security Descriptor?",
+          "How does an impersonation token differ from a primary process token?",
+          "What role does LSASS play in Windows authentication, and why is it a primary target?",
+          "Explain how ETW (Event Tracing for Windows) delivers telemetry to EDR agents."
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 1 · Programming and low-level engineering",
+    period: "Months 5–6",
+    goal: "Build the ability to automate analysis, understand scripts and inspect compiled programs.",
+    modules: [
+      {
+        id: "mod-05",
+        num: "05",
+        title: "Python for Cybersecurity",
+        whyMatters: "Automate repeatable research and defensive analysis tasks; understand data handling and APIs.",
+        topicsStr: "Syntax, types, control flow, functions, collections, modules, packages, exceptions, file handling, JSON/CSV/XML, regex, OOP, iterators, generators, virtual environments, sockets, HTTP clients, APIs, subprocess, logging, testing, async, concurrency, binary parsing and data analysis.",
+        booksStr: "Python official tutorial; Automate the Boring Stuff chapters on files, regex, web/API interaction, spreadsheets and automation; Real Python for deeper concepts.",
+        coursesStr: "Hackers-Arise: Python Basics for Hackers, Scripting for Hackers, Advanced Python for Hackers. HTB Academy: Introduction to Python or equivalent current modules.",
+        practicalStr: "Build a log parser, IOC normaliser, hash utility, PCAP metadata extractor and report generator using safe sample data.",
+        deliverable: "Four documented Python utilities with tests and usage instructions.",
+        urls: [
+          { name: "Python Tutorial", url: "https://docs.python.org/3/tutorial/" },
+          { name: "Automate the Boring Stuff", url: "https://automatetheboringstuff.com/" },
+          { name: "Real Python", url: "https://realpython.com/" }
+        ],
+        tools: ["python3", "scapy", "requests", "pefile", "dpkt", "pytest"],
+        commands: [
+          { cmd: "python3 -m venv venv && source venv/bin/activate", desc: "Create and activate isolated Python virtual environment" },
+          { cmd: "python3 -c \"import pefile; pe=pefile.PE('sample.exe'); print(pe.dump_info())\"", desc: "Parse PE headers and section characteristics in CLI" },
+          { cmd: "pip install scapy requests pefile pytest black", desc: "Install standard Python security analysis toolchain" },
+          { cmd: "python3 -m pytest tests/ -v", desc: "Execute automated unit tests with verbose reporting" }
+        ],
+        subtopics: [
+          { title: "Binary Parsing & Raw Struct Unpacking", detail: "struct module, binary pack/unpack, big-endian vs little-endian, parsing custom file headers and network protocols." },
+          { title: "Network Scripting with Sockets & Scapy", detail: "Raw socket manipulation, constructing TCP/IP packets with Scapy, sniffing PCAP streams, analyzing DNS requests programmatically." },
+          { title: "Threat Intelligence & API Automation", detail: "REST APIs with requests/aiohttp, rate limiting, JSON schema validation, normalizing IOCs into STIX 2.1 objects." }
+        ],
+        knowledgeAssessment: [
+          "How do you safely unpack a 32-bit little-endian integer from a binary stream in Python?",
+          "Explain the difference between synchronous requests and async event-driven HTTP querying.",
+          "How does pefile locate the Import Address Table of an executable?",
+          "Why is input sanitization critical when using Python's subprocess module?"
+        ]
+      },
+      {
+        id: "mod-06",
+        num: "06",
+        title: "PowerShell and Bash Automation",
+        whyMatters: "Automate administration and collect system evidence reliably.",
+        topicsStr: "PowerShell objects and pipeline; cmdlets; variables; functions; modules; error handling; CIM/WMI; registry; Event Logs; processes and services; remoting concepts; script signing and logging. Bash variables, quoting, pipelines, functions, exit codes, text processing, process control and scheduled jobs.",
+        booksStr: "Microsoft PowerShell learning paths and reference; GNU Bash manual; explainShell to understand command syntax.",
+        coursesStr: "Hackers-Arise: PowerShell for Hackers and Scripting for Hackers. Reinforce with Microsoft Learn and Bash manual.",
+        practicalStr: "Create an endpoint inventory collector, event-log parser and Linux configuration-audit script. Run only on owned lab machines.",
+        deliverable: "Scripts with README, safe test data, error handling and sample output.",
+        urls: [
+          { name: "PowerShell Docs", url: "https://learn.microsoft.com/en-us/powershell/" },
+          { name: "Bash Manual", url: "https://www.gnu.org/software/bash/manual/" },
+          { name: "ExplainShell", url: "https://explainshell.com/" }
+        ],
+        tools: ["pwsh", "Get-CimInstance", "awk", "sed", "jq", "ShellCheck"],
+        commands: [
+          { cmd: "Get-CimInstance -ClassName Win32_Service | Where-Object State -eq 'Running' | Select Name, PathName", desc: "Enumerate running Windows services with binary paths" },
+          { cmd: "Get-WinEvent -FilterHashtable @{LogName='Security'; ID=4688} | Select TimeCreated, Message -First 5", desc: "Extract command line process creation events (Event ID 4688)" },
+          { cmd: "awk -F: '($3 == 0) {print $1}' /etc/passwd", desc: "Find all Linux accounts with UID 0 (root equivalent)" },
+          { cmd: "find /etc/cron* -type f -exec ls -la {} +", desc: "Audit all scheduled cron jobs and permissions" },
+          { cmd: "shellcheck script.sh", desc: "Lint Bash script for subtle bugs, quoting mistakes, and security risks" }
+        ],
+        subtopics: [
+          { title: "PowerShell Object Pipeline & CIM Queries", detail: "Pipeline passing .NET objects rather than strings, WMI repository architecture, CIM sessions, Script Block execution." },
+          { title: "PowerShell Security Controls & Telemetry", detail: "Execution Policy (and why it is not a boundary), Constrained Language Mode, Script Block Logging (Event ID 4104), Transcription." },
+          { title: "POSIX Bash Scripting & Stream Processing", detail: "Subshells, file descriptors (stdin/stdout/stderr), parameter expansion, sed/awk text filtering, cron and systemd timer syntax." }
+        ],
+        knowledgeAssessment: [
+          "Why is PowerShell's object pipeline fundamentally more reliable for automation than Bash text streams?",
+          "How does PowerShell Script Block Logging defeat obfuscation?",
+          "What is the difference between $() command substitution and backticks in Bash?",
+          "How do you handle error trapping and non-terminating errors in PowerShell ($ErrorActionPreference)?"
+        ]
+      },
+      {
+        id: "mod-07",
+        num: "07",
+        title: "C, C++ and Assembly",
+        whyMatters: "Understand memory, compiled code and low-level behaviour needed for reverse engineering and vulnerability research.",
+        topicsStr: "C types, pointers, arrays, strings, structs, unions, memory allocation, stack/heap, compilation and linking; C++ classes, references, RAII, smart pointers, templates and STL; binary/hex, registers, x86/x64 instructions, addressing, stack frames, calling conventions, control flow, debugging and disassembly.",
+        booksStr: "Computer Systems: A Programmer's Perspective: information representation, machine-level programming, processor architecture, linking, exceptional control flow, virtual memory, system I/O and networking. OST2 assembly courses.",
+        coursesStr: "Hackers-Arise: x86 Assembler Language; Exploit Development Part I and II only after C and assembly foundations. OST2: x86-64 and low-level programming. pwn.college for structured practice.",
+        practicalStr: "Compile benign C programs, inspect assembly in Compiler Explorer, debug with GDB and map stack/heap layouts in toy programs.",
+        deliverable: "Annotated source-to-assembly examples and a debugger walkthrough report.",
+        urls: [
+          { name: "CS:APP", url: "https://csapp.cs.cmu.edu/" },
+          { name: "OST2", url: "https://ost2.fyi/" },
+          { name: "pwn.college", url: "https://pwn.college/" }
+        ],
+        tools: ["gcc / clang", "gdb (gef/pwndbg)", "Compiler Explorer", "objdump", "strace", "valgrind"],
+        commands: [
+          { cmd: "gcc -g -O0 -fno-stack-protector -z execstack program.c -o program", desc: "Compile toy binary with debugging symbols and disabled protections for analysis" },
+          { cmd: "objdump -d -M intel ./program | grep -A 20 '<main>:'", desc: "Disassemble main function in Intel syntax" },
+          { cmd: "gdb -q ./program -ex 'b *main' -ex 'r' -ex 'info registers'", desc: "Launch GDB, set breakpoint at main, run and display register state" },
+          { cmd: "valgrind --leak-check=full ./program", desc: "Analyze heap memory leaks and buffer over-reads" }
+        ],
+        subtopics: [
+          { title: "Pointers, Memory Allocation & Memory Model", detail: "Pointer arithmetic, double pointers, stack allocation vs heap (malloc/free), memory leaks, dangling pointers, struct packing." },
+          { title: "x86-64 Assembly & Calling Conventions", detail: "System V AMD64 ABI (RDI, RSI, RDX, RCX, R8, R9) vs Microsoft x64 (RCX, RDX, R8, R9, Shadow Space), stack alignment, prologue/epilogue." },
+          { title: "Compilation, Linking & Debugging", detail: "Pre-processor, compilation to assembly, object file creation, dynamic vs static linking, symbol tables, GDB memory examination." }
+        ],
+        knowledgeAssessment: [
+          "Explain what happens to RSP and RBP when a CALL instruction is executed.",
+          "What is the difference between Microsoft x64 and System V AMD64 calling conventions?",
+          "Why is an out-of-bounds pointer write to the stack dangerous for control flow?",
+          "How does RAII in C++ prevent resource leaks compared to manual C memory management?"
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 2 · APT research and Cyber Threat Intelligence",
+    period: "Months 7–10",
+    goal: "Learn to investigate threat actors, campaigns, infrastructure and reported behaviour using evidence and confidence levels.",
+    modules: [
+      {
+        id: "mod-08",
+        num: "08",
+        title: "APT Fundamentals and MITRE ATT&CK",
+        whyMatters: "Understand adversary motivations and translate public reporting into structured intelligence.",
+        topicsStr: "APT vs cybercrime; state-sponsored and financially motivated threats; campaigns vs intrusions; actor aliases; malware families; TTPs; attribution limits; false flags; intelligence lifecycle; strategic/operational/tactical/technical CTI; source reliability; confidence; ATT&CK tactics, techniques, sub-techniques, groups, software, campaigns, mitigations and detection strategies; Kill Chain; Diamond Model; Pyramid of Pain; STIX/TAXII.",
+        booksStr: "MITRE ATT&CK: read Enterprise matrix, tactics, techniques, groups, software, campaigns, mitigations and detection strategies. Study analytic confidence and source quality. CISA advisories and public vendor reports for evidence.",
+        coursesStr: "Hackers-Arise: Cyber Threat Intelligence for Hackers; MITRE ATT&CK Framework for Security Analyst. Supplement with MITRE CTI training and HTB/THM relevant CTI rooms.",
+        practicalStr: "Map public campaign reporting to ATT&CK; record source URL, quoted behaviour, technique rationale and confidence; build an ATT&CK Navigator layer.",
+        deliverable: "One actor profile, one campaign timeline, ATT&CK layer and evidence register.",
+        urls: [
+          { name: "MITRE ATT&CK", url: "https://attack.mitre.org/" },
+          { name: "ATT&CK Navigator", url: "https://mitre-attack.github.io/attack-navigator/" },
+          { name: "CISA Advisories", url: "https://www.cisa.gov/news-events/cybersecurity-advisories" },
+          { name: "MITRE Intelligence Analysis", url: "https://www.mitre.org/our-impact/intelligence-analysis" }
+        ],
+        tools: ["ATT&CK Navigator", "OpenCTI", "MISP", "yeti", "Spiderfoot"],
+        commands: [
+          { cmd: "curl -s https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json | jq '.objects[0]'", desc: "Query MITRE CTI STIX repository via CLI" },
+          { cmd: "misp-cli --search-attributes --value 'malicious-domain.com'", desc: "Query MISP threat sharing instance for matching IOCs" },
+          { cmd: "stix2_validator report.json", desc: "Validate STIX 2.1 compliance of threat intelligence export" }
+        ],
+        subtopics: [
+          { title: "Threat Actor Models & Intelligence Frameworks", detail: "Lockheed Martin Cyber Kill Chain, Diamond Model of Intrusion Analysis (Adversary, Capability, Infrastructure, Victim), Pyramid of Pain." },
+          { title: "MITRE ATT&CK Structure & Taxonomy", detail: "14 Tactics (Initial Access to Impact), Techniques, Sub-techniques, Data Sources, Mitigations, and Behavioral Detections." },
+          { title: "Analytical Confidence & Attribution Rigor", detail: "Admiralty Code / Source Reliability (A-F) & Credibility (1-6), Analysis of Competing Hypotheses (ACH), avoiding false flags." }
+        ],
+        knowledgeAssessment: [
+          "Explain why TTPs are at the apex of David Bianco's Pyramid of Pain.",
+          "How does the Diamond Model model pivoting between infrastructure and capabilities?",
+          "What distinguishes Strategic Threat Intelligence from Tactical Threat Intelligence?",
+          "How do you evaluate source reliability when reviewing a commercial threat intelligence report?"
+        ]
+      },
+      {
+        id: "mod-09",
+        num: "09",
+        title: "OSINT and Threat Infrastructure Analysis",
+        whyMatters: "Collect and correlate public information about domains, IPs, certificates and exposed infrastructure without intrusive access.",
+        topicsStr: "Search operators; source validation; WHOIS/RDAP; DNS; passive DNS; certificate transparency; ASN; IP reputation; hosting; URL analysis; public code repositories; metadata; public documents; Shodan/Censys; relationship graphs; infrastructure pivoting; collection ethics and reporting.",
+        booksStr: "Open Source Intelligence Techniques by Michael Bazzell: search, public records, domain/infrastructure, social media, metadata, verification and reporting. Read official tool documentation.",
+        coursesStr: "Hackers-Arise: Ultimate OSINT Beginner, Open Source Intelligence, Remaining Anonymous. HTB Academy: Footprinting and Reconnaissance. Tools: Amass, Subfinder, Shodan, Censys, Maltego, SpiderFoot and crt.sh.",
+        practicalStr: "Conduct passive analysis of a publicly documented campaign's domains and certificates; preserve evidence and confidence; avoid unauthorised scanning.",
+        deliverable: "Infrastructure relationship graph and reproducible OSINT report.",
+        urls: [
+          { name: "Shodan", url: "https://www.shodan.io/" },
+          { name: "Censys", url: "https://search.censys.io/" },
+          { name: "Certificate Transparency (crt.sh)", url: "https://crt.sh/" },
+          { name: "ProjectDiscovery", url: "https://docs.projectdiscovery.io/" },
+          { name: "Maltego", url: "https://www.maltego.com/" }
+        ],
+        tools: ["Shodan", "Censys", "Subfinder", "Amass", "crt.sh", "Maltego", "dnsx"],
+        commands: [
+          { cmd: "subfinder -d example.com -silent | dnsx -silent -a -resp", desc: "Enumerate subdomains passively and resolve to active A records" },
+          { cmd: "curl -s 'https://crt.sh/?q=%.example.com&output=json' | jq -r '.[].name_value' | sort -u", desc: "Extract all certificates from Certificate Transparency logs" },
+          { cmd: "shodan search 'ssl.cert.subject.CN:\"target.com\" 200' --fields ip_str,port", desc: "Discover exposed IP addresses hosting SSL certificates for target" },
+          { cmd: "whois -h whois.radb.net -- '-i origin AS13335'", desc: "Enumerate all IP prefixes announced by an Autonomous System Number" }
+        ],
+        subtopics: [
+          { title: "Passive DNS & Infrastructure Pivoting", detail: "Forward DNS, reverse DNS, historic pDNS records, tracking domain name server changes across campaigns, identifying shared bulletproof hosting." },
+          { title: "Certificate Transparency & JARM Fingerprinting", detail: "Parsing CT logs for pre-issuance staging, JARM active TLS server fingerprinting to detect Cobalt Strike, Mythic, and custom C2 servers." },
+          { title: "Internet-Wide Scanners & OSINT Ethics", detail: "Querying Shodan, Censys, and BinaryEdge without touching target infrastructure directly; maintaining passive OPSEC." }
+        ],
+        knowledgeAssessment: [
+          "How can Certificate Transparency logs reveal adversary staging infrastructure before a phishing campaign launches?",
+          "Explain how JARM fingerprints are generated and why identical C2 configurations yield identical hashes.",
+          "What is the difference between active reconnaissance and passive threat infrastructure pivoting?",
+          "How does an analyst pivot from a single WHOIS registrant email to an entire infrastructure fleet?"
+        ]
+      },
+      {
+        id: "mod-10",
+        num: "10",
+        title: "APT Groups and Campaign Research",
+        whyMatters: "Develop a repeatable method for researching named actors and reconstructing campaigns.",
+        topicsStr: "Research aliases; attribution caveats; motivation; target sectors; victimology; timelines; initial access; execution; persistence; credential access; discovery; lateral movement; C2; malware; infrastructure; detections; mitigations; competing hypotheses and intelligence gaps.",
+        booksStr: "Read MITRE group pages and primary public reporting from CISA, Microsoft, Google Threat Intelligence, Mandiant, ESET and Unit 42. Compare multiple reports rather than trusting a single attribution.",
+        coursesStr: "Hackers-Arise: CTI, MITRE ATT&CK, Phishing Analysis and Investigating a Cyber Attack. This is a research-led module, so primary reports matter more than video courses.",
+        practicalStr: "Create dossiers for APT28, APT29, Lazarus, APT41, Sandworm and Turla. Distinguish observed facts from vendor assessments.",
+        deliverable: "Six evidence-backed actor/campaign dossiers and a comparative analysis.",
+        urls: [
+          { name: "ATT&CK Groups", url: "https://attack.mitre.org/groups/" },
+          { name: "Google Threat Intelligence", url: "https://cloud.google.com/blog/topics/threat-intelligence" },
+          { name: "Mandiant Research", url: "https://www.mandiant.com/resources" },
+          { name: "Microsoft Security Blog", url: "https://www.microsoft.com/en-us/security/blog/" }
+        ],
+        tools: ["MISP", "OpenCTI", "ATT&CK Navigator", "Maltego", "Obsidian"],
+        commands: [
+          { cmd: "opencti-cli threat-actors list --search 'APT29'", desc: "Query OpenCTI instance for threat actor alias history and attributed malware" },
+          { cmd: "cat campaign_report.pdf | pdftotext - - | grep -iE 'cve-[0-9]{4}-[0-9]{4,}' | sort -u", desc: "Extract exploited CVE identifiers from research whitepaper" }
+        ],
+        subtopics: [
+          { title: "Major APT Profiles & Operational TTPs", detail: "APT28 (Fancy Bear / GRU), APT29 (Cozy Bear / SVR), Lazarus Group (DPRK RGB), APT41 (Double Dragon / MSS), Sandworm (GRU Unit 74455)." },
+          { title: "Campaign Reconstruction Methodology", detail: "Timeline analysis, identifying initial access vector (spearphishing vs zero-day vs supply chain), tracking persistence mechanisms." },
+          { title: "Intelligence Gaps & Analytical Traps", detail: "Dealing with missing evidence, distinguishing shared malware builder code from state actor cooperation, false flags in attribution." }
+        ],
+        knowledgeAssessment: [
+          "What operational security differences distinguish APT29 from APT28?",
+          "How did Sandworm's operations differ between BlackEnergy, NotPetya, and Industroyer?",
+          "Why is actor clustering often named differently across commercial security vendors?",
+          "What evidence is required to establish high confidence in state-sponsored attribution?"
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 3 · Initial access, identity and enterprise compromise research",
+    period: "Months 11–14",
+    goal: "Understand identity systems and documented initial-access behaviours from both attacker-research and defensive perspectives.",
+    modules: [
+      {
+        id: "mod-11",
+        num: "11",
+        title: "Social Engineering, Phishing and Identity Security",
+        whyMatters: "Understand how human and identity attack surfaces are abused and how organisations detect and prevent that abuse.",
+        topicsStr: "Phishing, spear phishing, BEC, vishing, smishing, QR phishing, email headers, SMTP, SPF, DKIM, DMARC, attachment and URL analysis, OAuth consent risks, MFA fatigue, AiTM concepts, session tokens, FIDO2, passkeys, WebAuthn, SSO, OAuth, OIDC, SAML, Conditional Access and identity logs.",
+        booksStr: "NIST Digital Identity Guidelines; Microsoft Entra identity documentation; MITRE Initial Access; CISA phishing-resistant MFA guidance; OWASP authentication and session guidance.",
+        coursesStr: "Hackers-Arise: Phishing Analysis for Security Analyst; The Science and Art of Social Engineering; The Art of Social Engineering in the Era of AI. Use approved simulation platforms and synthetic accounts.",
+        practicalStr: "Analyse synthetic phishing messages and headers; review identity sign-in logs; compare password-based MFA with phishing-resistant MFA. Do not deploy credential/session harvesting against real services or people.",
+        deliverable: "Email investigation report, identity threat model and phishing-resistant MFA recommendation.",
+        urls: [
+          { name: "NIST Digital Identity", url: "https://pages.nist.gov/800-63-4/" },
+          { name: "Microsoft Entra", url: "https://learn.microsoft.com/en-us/entra/identity/" },
+          { name: "ATT&CK Initial Access", url: "https://attack.mitre.org/tactics/TA0001/" },
+          { name: "OWASP WSTG", url: "https://owasp.org/www-project-web-security-testing-guide/" }
+        ],
+        tools: ["Emldump", "Mailheader analyzer", "Sublime Security", "Entra ID Portal", "YubiKey Manager"],
+        commands: [
+          { cmd: "dig TXT example.com +short | grep v=spf1", desc: "Inspect DNS SPF record policy flags" },
+          { cmd: "opendkim-testkey -d example.com -s default -k key.private", desc: "Verify DKIM DNS selector public key alignment" },
+          { cmd: "python3 -m eml_analyzer message.eml", desc: "Extract routing hops, Received headers, and attachments from raw EML" }
+        ],
+        subtopics: [
+          { title: "Email Security Architecture (SPF, DKIM, DMARC)", detail: "SPF alignment, DKIM cryptographic message signing, DMARC enforcement policies (p=reject, p=quarantine), bounce attacks." },
+          { title: "Adversary-in-the-Middle (AiTM) & Session Theft", detail: "Reverse proxy credential interceptors (Evilginx concepts), stealing session cookies and bearer tokens to bypass traditional push/SMS MFA." },
+          { title: "Phishing-Resistant MFA & Modern Identity", detail: "FIDO2 / WebAuthn, hardware authenticators, origin-bound cryptographic challenges, Microsoft Entra Conditional Access policies." }
+        ],
+        knowledgeAssessment: [
+          "Why does DMARC policy enforcement fail if SPF passes but does not align with the RFC5322 From header?",
+          "How does FIDO2 / WebAuthn mathematically prevent Adversary-in-the-Middle proxy attacks?",
+          "Explain how OAuth App Consent Grants can be abused for persistent mailbox access without obtaining passwords.",
+          "What telemetry in Entra ID sign-in logs indicates token replay from an anomalous IP?"
+        ]
+      },
+      {
+        id: "mod-12",
+        num: "12",
+        title: "Active Directory and Windows Enterprise Security",
+        whyMatters: "Understand enterprise identity, authentication and permission relationships for APT research and authorised assessments.",
+        topicsStr: "Domains, forests, trees, OUs, DCs, Global Catalog, DNS, LDAP, Kerberos, NTLM, TGT/TGS, SPN, Group Policy, trusts, replication, FSMO, ACL/DACL/SACL, ACE, service accounts, gMSA, delegation, ADCS, PKI, LAPS, privileged groups, tiered administration, Entra hybrid identity and auditing.",
+        booksStr: "Microsoft AD DS and Kerberos documentation; LDAP and Kerberos standards; Windows security documentation. HTB AD path for sequenced practical depth.",
+        coursesStr: "Hackers-Arise: Active Directory for Hackers and PowerShell for Hackers. HTB: Active Directory fundamentals and Active Directory Penetration Tester path. TryHackMe: AD and Windows enterprise rooms.",
+        practicalStr: "Build an isolated domain with one Domain Controller and two clients; configure users, groups, GPO and auditing; inspect Kerberos/LDAP evidence; assess and remediate lab misconfigurations.",
+        deliverable: "AD architecture diagram, configuration checklist, security assessment and remediation report.",
+        urls: [
+          { name: "AD DS Documentation", url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/" },
+          { name: "HTB AD Path", url: "https://academy.hackthebox.com/path/preview/active-directory-penetration-tester" },
+          { name: "AD Security Research", url: "https://adsecurity.org/" }
+        ],
+        tools: ["BloodHound", "PowerView", "SharpHound", "Impacket", "Rubeus", "Mimikatz"],
+        commands: [
+          { cmd: "Get-DomainUser -SPN | Select samaccountname, serviceprincipalname", desc: "Enumerate accounts vulnerable to Kerberoasting (PowerView)" },
+          { cmd: "Invoke-BloodHound -CollectionMethods All -ZipFileName ad_audit.zip", desc: "Execute complete Active Directory graph relationship collection" },
+          { cmd: "impacket-GetNPUsers domain.local/ -usersfile users.txt -format hashcat -no-pass", desc: "Request AS-REP hashes for accounts without Kerberos Pre-Authentication required" },
+          { cmd: "Rubeus.exe triage", desc: "List all Kerberos tickets stored in memory of current logon session" }
+        ],
+        subtopics: [
+          { title: "Kerberos Protocol Mechanics", detail: "AS-REQ / AS-REP exchange, TGT issuance, KRBTGT encryption, TGS-REQ / TGS-REP exchange, service tickets, PAC validation." },
+          { title: "Active Directory Access Control Lists (ACLs)", detail: "GenericAll, GenericWrite, WriteDacl, WriteOwner, ExtendedRight (DS-Replication-Get-Changes-All / DCSync abuse), BloodHound graph paths." },
+          { title: "Enterprise Tiering & Privilege Hardening", detail: "Tier 0 (Identity plane), Tier 1 (Enterprise servers), Tier 2 (Workstations), PAWs, LAPS deployment, Protected Users security group." }
+        ],
+        knowledgeAssessment: [
+          "Explain the cryptographic flaw that makes service accounts with SPNs vulnerable to offline Kerberoasting.",
+          "What specific permissions are required in AD to execute a DCSync attack, and what API is called?",
+          "How does Unconstrained Delegation differ from Constrained Delegation with Protocol Transition?",
+          "What is the difference between NTLMv2 network challenge-response and NetNTLM hashes?"
+        ]
+      },
+      {
+        id: "mod-13",
+        num: "13",
+        title: "APT Execution, Persistence, Lateral Movement and C2 Analysis",
+        whyMatters: "Recognise post-compromise behaviours and connect each behaviour to host/network evidence and detection opportunities.",
+        topicsStr: "Process trees; command interpreters; script execution; PowerShell telemetry; WMI; services; scheduled tasks; registry autoruns; Linux systemd; SSH artefacts; privilege boundaries; remote administration; SMB/RDP/WinRM telemetry; C2 architecture; beaconing; DNS/HTTP indicators; staging, collection and exfiltration indicators.",
+        booksStr: "MITRE ATT&CK technique pages and detection strategies; Sysmon documentation; Microsoft Sysinternals; Atomic Red Team test documentation; CALDERA documentation.",
+        coursesStr: "Hackers-Arise: Red Team Operator Part I, Active Directory, PowerShell and Advanced Linux. Use course material to understand concepts, not as a licence to operate outside a lab.",
+        practicalStr: "Run selected safe Atomic Red Team tests on disposable lab endpoints; collect Sysmon and network telemetry; validate detections and document false positives.",
+        deliverable: "ATT&CK behaviour-to-telemetry matrix, detection hypotheses and test report.",
+        urls: [
+          { name: "Sysinternals", url: "https://learn.microsoft.com/en-us/sysinternals/" },
+          { name: "Sysmon Docs", url: "https://learn.microsoft.com/en-us/sysmon/" },
+          { name: "Atomic Red Team", url: "https://github.com/redcanaryco/atomic-red-team" },
+          { name: "MITRE CALDERA", url: "https://caldera.mitre.org/" }
+        ],
+        tools: ["Atomic Red Team", "CALDERA", "Sysmon", "Velociraptor", "Wireshark", "Zeek"],
+        commands: [
+          { cmd: "Invoke-AtomicTest T1059.001 -ShowDetails", desc: "Display execution steps for PowerShell ATT&CK test" },
+          { cmd: "Get-ScheduledTask | Where-Object {$_.State -ne 'Disabled' -and $_.Author -notlike '*Microsoft*'} | Select TaskName, TaskPath", desc: "Enumerate non-standard persistence scheduled tasks" },
+          { cmd: "Get-CimInstance -Namespace root\\subscription -ClassName __EventConsumer", desc: "Enumerate persistent WMI Event Consumers" },
+          { cmd: "tshark -r c2.pcap -qz io,stat,10,\"COUNT(frame.time_delta)frame.time_delta\"", desc: "Analyze network traffic packet timing intervals to identify periodic beaconing" }
+        ],
+        subtopics: [
+          { title: "Execution Vectors & Living off the Land (LotL)", detail: "LOLBAS and GTFOBins, abusing certified native binaries (certutil, mshta, wmic, bitsadmin, rundll32) to evade basic application controls." },
+          { title: "Host Persistence Mechanisms", detail: "Registry Run keys, Startup folders, COM hijacking, Windows Services, WMI event subscriptions, Linux systemd unit overrides, cron." },
+          { title: "Command & Control (C2) Architecture", detail: "Malleable C2 profiles, jitter calculation, domain fronting concepts, DNS tunneling, multi-tier redirectors, staging payloads." }
+        ],
+        knowledgeAssessment: [
+          "How does jitter in C2 beaconing defeat simple frequency-based network alerting?",
+          "What Sysmon Event IDs correspond to process creation, process injection, and image loading?",
+          "How can an analyst detect COM hijacking persistence on a Windows workstation?",
+          "Explain the difference between Pass-the-Hash and Overpass-the-Hash."
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 4 · Malware analysis and reverse engineering",
+    period: "Months 15–19",
+    goal: "Learn to inspect suspicious files safely, reconstruct program behaviour and produce defensible malware intelligence.",
+    modules: [
+      {
+        id: "mod-14",
+        num: "14",
+        title: "Malware Analysis Fundamentals",
+        whyMatters: "Understand malware families and analyse files and behaviours safely in an isolated lab.",
+        topicsStr: "Malware taxonomy; trojans, worms, ransomware, loaders, droppers, RATs, infostealers and rootkits; hashes; strings; PE/ELF; imports/exports; sections; entropy; signatures; static analysis; dynamic analysis; process/file/registry/network behaviour; sandbox reports; YARA and behavioural indicators.",
+        booksStr: "Practical Malware Analysis: basic static/dynamic analysis, PE structure, disassembly, debugging and behavioural analysis. REMnux and FLARE-VM documentation; YARA and capa docs.",
+        coursesStr: "Hackers-Arise: Reverse Engineering Malware Parts I, II and III; Ransomware Training. Use REMnux, FLARE-VM, Ghidra, FLOSS, capa, YARA and PE-bear.",
+        practicalStr: "Start with benign binaries and safe training datasets; extract hashes/strings/imports; inspect PE headers; write basic YARA rules; compare static findings with sandbox reports.",
+        deliverable: "Malware analysis report, IOC list and tested YARA rule. Never execute unknown samples on a personal host.",
+        urls: [
+          { name: "REMnux Docs", url: "https://docs.remnux.org/" },
+          { name: "FLARE-VM", url: "https://github.com/mandiant/flare-vm" },
+          { name: "Ghidra", url: "https://ghidra-sre.org/" },
+          { name: "YARA Documentation", url: "https://yara.readthedocs.io/" },
+          { name: "Mandiant capa", url: "https://github.com/mandiant/capa" }
+        ],
+        tools: ["PE-bear", "capa", "FLOSS", "YARA", "Process Hacker", "FakeNet-NG", "RegShot"],
+        commands: [
+          { cmd: "capa -vv sample.bin", desc: "Identify capabilities, ATT&CK mapping, and MBC rules in binary" },
+          { cmd: "floss --no-static-strings sample.exe", desc: "Extract decoded and stack-based obfuscated strings from executable" },
+          { cmd: "yara -s rule.yar sample.exe", desc: "Scan binary with custom YARA rule and print matching string offsets" },
+          { cmd: "sha256sum sample.exe && ssdeep sample.exe", desc: "Calculate cryptographic SHA-256 and contextual fuzzy hash (ssdeep)" }
+        ],
+        subtopics: [
+          { title: "Static Analysis & PE Header Forensics", detail: "Dos Stub, PE Signature, File Header, Optional Header, Subsystem, Section Table (.text, .rdata, .data), Import Address Table analysis, entropy analysis." },
+          { title: "Dynamic Analysis & Behavioral Baselining", detail: "Host baselining with RegShot, network simulation with FakeNet-NG / inetsim, monitoring process injection and registry hooks in sandbox." },
+          { title: "Signaturing with YARA & IOC Extraction", detail: "Writing robust byte-pattern and string rules, wide vs ascii strings, condition logic, avoiding brittle hash indicators." }
+        ],
+        knowledgeAssessment: [
+          "What does high section entropy (e.g. > 7.2) indicate about a PE section?",
+          "Why is ssdeep (fuzzy hashing) more useful than SHA-256 for tracking malware variant campaigns?",
+          "How does capa determine that an executable contains process hollowing capability?",
+          "What indicators distinguish a packed executable from a standard compiled binary?"
+        ]
+      },
+      {
+        id: "mod-15",
+        num: "15",
+        title: "Reverse Engineering",
+        whyMatters: "Understand how compiled programs work so you can reconstruct logic, identify suspicious functions and explain observed behaviour.",
+        topicsStr: "PE/ELF/Mach-O overview; assembly; registers; stack and heap; calling conventions; function prologues/epilogues; control flow; CFG; disassembly; decompilation; debugging; breakpoints; cross-references; API calls; dynamic linking; symbol analysis; cryptographic routine recognition; obfuscation and packing concepts.",
+        booksStr: "OST2 x86-64 and low-level courses; CS:APP machine-level programming and linking; Ghidra documentation; GDB documentation.",
+        coursesStr: "Hackers-Arise: x86 Assembler Language, Reverse Engineering Malware I–III, Exploit Development I–II after prerequisites. Use OST2 as the low-level teaching backbone.",
+        practicalStr: "Compile harmless programs; disassemble; debug; map functions and control flow; document how a benign program processes input.",
+        deliverable: "Reverse-engineering notebook with annotated disassembly and reconstructed program logic.",
+        urls: [
+          { name: "OST2", url: "https://ost2.fyi/" },
+          { name: "Ghidra", url: "https://ghidra-sre.org/" },
+          { name: "GDB Documentation", url: "https://sourceware.org/gdb/documentation/" },
+          { name: "CS:APP", url: "https://csapp.cs.cmu.edu/" }
+        ],
+        tools: ["Ghidra", "IDA Free", "x64dbg", "GDB", "Cutter", "Binary Ninja Free"],
+        commands: [
+          { cmd: "ghidraHeadless /tmp/ghidra_proj myProject -import sample.bin -postScript DecompileAll.java", desc: "Run headless automated Ghidra decompilation" },
+          { cmd: "x64dbg sample.exe", desc: "Attach ring-3 Windows debugger with memory breakpoints and API call tracing" }
+        ],
+        subtopics: [
+          { title: "Control Flow Graphs & Decompilation Logic", detail: "Basic blocks, conditional branches (JZ, JNZ, JAE), loop reconstruction, switch tables, function cross-references (XREFs)." },
+          { title: "Anti-Analysis & Anti-Debugging Tricks", detail: "IsDebuggerPresent, PEB BeingDebugged flag, NtQueryInformationProcess, RDTSC timing checks, software vs hardware breakpoints (DR0-DR3)." },
+          { title: "Cryptographic Routine Recognition", detail: "Identifying standard S-boxes (AES), initialization vectors, XOR loops, RC4 key scheduling algorithms (KSA) and PRGA in disassembly." }
+        ],
+        knowledgeAssessment: [
+          "Explain how a debugger handles a software breakpoint (INT 3 / 0xCC) versus a hardware breakpoint.",
+          "How do you locate the True Condition path vs False Condition path in a disassembled branch?",
+          "What is the PEB (Process Environment Block) and how do malware authors query it to detect debuggers?",
+          "How can you differentiate a compiler-generated switch statement from nested IF statements in Ghidra?"
+        ]
+      },
+      {
+        id: "mod-16",
+        num: "16",
+        title: "Malware Intelligence and Threat Hunting",
+        whyMatters: "Convert malware observations into campaign intelligence and testable detections.",
+        topicsStr: "IOC extraction; family clustering; campaign correlation; YARA; Sigma; detection hypotheses; endpoint and network telemetry; false-positive testing; threat intelligence enrichment; evidence confidence; ATT&CK mapping; detection validation.",
+        booksStr: "YARA documentation; SigmaHQ rules; MISP and OpenCTI docs; Malware Traffic Analysis; vendor reports and CyberDefenders challenges.",
+        coursesStr: "Hackers-Arise: CTI, Memory Forensics, Phishing Analysis, Investigating a Cyber Attack and Snort. CyberDefenders for investigation practice.",
+        practicalStr: "Analyse safe sample datasets; enrich indicators; build and test rules; correlate host and network evidence; explain limitations.",
+        deliverable: "Malware research dossier, IOC package, detection rules and validation report.",
+        urls: [
+          { name: "Sigma Rules", url: "https://sigmahq.io/" },
+          { name: "MISP Project", url: "https://docs.misp-project.org/" },
+          { name: "OpenCTI", url: "https://docs.opencti.io/" },
+          { name: "Malware Traffic Analysis", url: "https://www.malware-traffic-analysis.net/" }
+        ],
+        tools: ["Sigma", "YARA", "MISP", "OpenCTI", "CyberChef", "VirusTotal Intelligence"],
+        commands: [
+          { cmd: "sigmac -t splunk -c sysmon rule.yml", desc: "Convert generic Sigma detection rule into Splunk SPL query" },
+          { cmd: "python3 -m yara_ci test_rules/", desc: "Run continuous integration tests on YARA ruleset against clean corpus" }
+        ],
+        subtopics: [
+          { title: "Malware Family Clustering & Lineage", detail: "Identifying shared code bases across versions, distinguishing commodity malware loaders from custom APT secondary payloads." },
+          { title: "Sigma Rule Engineering", detail: "Log source definition, event selection, conditions, field mappings, testing against true-positive and false-positive event logs." },
+          { title: "Threat Hunting Hypotheses", detail: "Formulating testable hypotheses based on adversary TTPs, hunting for anomalous parent-child relationships, validating telemetry coverage." }
+        ],
+        knowledgeAssessment: [
+          "How does a Sigma rule differ fundamentally from a traditional SIEM query?",
+          "What steps are required to validate that a YARA rule will not generate catastrophic false positives on clean system libraries?",
+          "Explain the difference between indicator matching and hypothesis-driven behavioral threat hunting.",
+          "How do you track malware campaign evolution when the adversary changes C2 domains and hashes daily?"
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 5 · DFIR, incident response and detection engineering",
+    period: "Months 20–23",
+    goal: "Acquire and interpret evidence, reconstruct incidents and engineer detections.",
+    modules: [
+      {
+        id: "mod-17",
+        num: "17",
+        title: "Digital Forensics",
+        whyMatters: "Learn evidence handling, acquisition and filesystem/host artefact analysis.",
+        topicsStr: "Evidence principles; chain of custody; imaging; hash verification; NTFS, FAT, ext4; deleted files; registry; browser artefacts; event logs; email artefacts; metadata; timelines; file recovery; anti-forensics indicators; legal and report-writing principles.",
+        booksStr: "File System Forensic Analysis by Brian Carrier; The Sleuth Kit and Autopsy docs; Eric Zimmerman tool documentation; NIST forensic guidance.",
+        coursesStr: "Hackers-Arise: Digital Forensics, Advanced Digital Forensics, Anti-Forensics, Investigating a Cyber Attack and Cyber Law.",
+        practicalStr: "Use forensic images and training datasets; verify hashes; inspect filesystem and registry artefacts; build a timeline; preserve source and working copies.",
+        deliverable: "Evidence register, forensic timeline and formal investigation report.",
+        urls: [
+          { name: "The Sleuth Kit", url: "https://www.sleuthkit.org/" },
+          { name: "Autopsy", url: "https://www.autopsy.com/" },
+          { name: "Eric Zimmerman Tools", url: "https://ericzimmerman.github.io/" }
+        ],
+        tools: ["Autopsy", "FTK Imager", "KAPE", "MFTECmd", "Registry Explorer", "Plaso / log2timeline"],
+        commands: [
+          { cmd: "MFTECmd.exe -f 'C:\\$MFT' --csv C:\\out\\ --csvf mft_parsed.csv", desc: "Parse Master File Table to reconstruct file creation and timestamps" },
+          { cmd: "log2timeline.py --storage-file timeline.plaso image.E01", desc: "Extract super-timeline of all filesystem and artifact events" },
+          { cmd: "ewfacquire /dev/sdb -t evidence_disk -f encase6 -S 2G", desc: "Create forensic raw-to-E01 disk image with hash verification" }
+        ],
+        subtopics: [
+          { title: "NTFS Artifacts ($MFT, $LogFile, $UsnJrnl)", detail: "Master File Table records, $STANDARD_INFORMATION vs $FILE_NAME timestamps, timestomping detection, USN change journal parsing." },
+          { title: "Execution Artifacts (Shimcache, Amcache, Prefetch)", detail: "Windows Prefetch file parsing (.pf), Amcache.hve SHA1 hashing of executed binaries, Shimcache (AppCompatCache) execution proof." },
+          { title: "Forensic Timeline Reconstruction", detail: "Super-timeline generation, event normalization, correlating user logon sessions with file access and process execution." }
+        ],
+        knowledgeAssessment: [
+          "Explain how comparing $STANDARD_INFORMATION and $FILE_NAME timestamps reveals timestomping.",
+          "What execution information does Windows Prefetch provide that Shimcache does not?",
+          "How does a forensic examiner verify chain of custody and data integrity during acquisition?",
+          "What traces remain on an NTFS volume after a file is deleted and its clusters are unallocated?"
+        ]
+      },
+      {
+        id: "mod-18",
+        num: "18",
+        title: "Memory Forensics",
+        whyMatters: "Learn to investigate volatile evidence and interpret suspicious process and memory artefacts.",
+        topicsStr: "RAM acquisition; memory layout; process enumeration; process memory; DLLs; handles; network connections; command lines; kernel structures; drivers; memory mappings; cross-view analysis; timeline correlation and limitations.",
+        booksStr: "Volatility 3 documentation and training datasets; memory forensics material from CyberDefenders; Windows internals references.",
+        coursesStr: "Hackers-Arise: Memory Forensics and Advanced Digital Forensics. CyberDefenders memory challenges for guided case practice.",
+        practicalStr: "Analyse provided memory images; enumerate processes and connections; correlate findings with disk and event logs.",
+        deliverable: "Memory investigation report with reproducible commands and evidence references.",
+        urls: [
+          { name: "Volatility 3 Docs", url: "https://volatility3.readthedocs.io/" },
+          { name: "CyberDefenders", url: "https://cyberdefenders.org/" }
+        ],
+        tools: ["Volatility 3", "WinPmem", "LiME", "MemProcFS", "Rekall"],
+        commands: [
+          { cmd: "vol -f mem.dmp windows.pslist", desc: "Enumerate active processes via double-linked EPROCESS list" },
+          { cmd: "vol -f mem.dmp windows.psscan", desc: "Scan physical memory pool tags to find unlinked / hidden processes" },
+          { cmd: "vol -f mem.dmp windows.malfind --dump", desc: "Detect unmapped memory regions with PAGE_EXECUTE_READWRITE and dump shellcode" },
+          { cmd: "vol -f mem.dmp windows.netscan", desc: "Extract historic and active TCP/UDP endpoints and owning PIDs from memory" }
+        ],
+        subtopics: [
+          { title: "DKOM & Process Hiding Detection", detail: "Direct Kernel Object Manipulation (DKOM), comparing pslist (active list) vs psscan (pool scanning) to uncover hidden rootkits." },
+          { title: "Code Injection & Process Hollowing Detection", detail: "Identifying VAD (Virtual Address Descriptor) anomalies, PAGE_EXECUTE_READWRITE memory without backing files, injected PE headers." },
+          { title: "Volatile Network & Credential Extraction", detail: "Reconstructing network connections from socket objects, carving LSASS process memory for plaintext or NTLM secrets." }
+        ],
+        knowledgeAssessment: [
+          "How does Volatility's malfind plugin identify code injection?",
+          "What is the difference between pslist and psscan in Volatility?",
+          "Why can memory acquisition alter the state of the target system (Heisenberg effect in forensics)?",
+          "What forensic value does a pagefile or crash dump provide when full RAM is unavailable?"
+        ]
+      },
+      {
+        id: "mod-19",
+        num: "19",
+        title: "Network Forensics",
+        whyMatters: "Reconstruct network activity from packet captures, flow data and network sensors.",
+        topicsStr: "PCAP structure; TCP streams; DNS, HTTP, TLS metadata, SMB and email protocols; flow records; beaconing patterns; suspicious outbound traffic; Zeek logs; Suricata alerts; firewall correlation; timeline and exfiltration indicators.",
+        booksStr: "Wireshark docs; Zeek docs; Suricata docs; Malware Traffic Analysis PCAPs; network forensic chapters in relevant texts.",
+        coursesStr: "Hackers-Arise: Network Forensics, Wireshark for Cybersecurity, Snort for Hackers and Incident Response. CyberDefenders network challenges.",
+        practicalStr: "Investigate supplied PCAPs; identify conversations, DNS lookups and suspicious flows; compare packet evidence with Zeek/Suricata output.",
+        deliverable: "PCAP investigation report with timeline and supporting packet references.",
+        urls: [
+          { name: "Wireshark Docs", url: "https://www.wireshark.org/docs/" },
+          { name: "Zeek Docs", url: "https://docs.zeek.org/" },
+          { name: "Suricata Docs", url: "https://docs.suricata.io/" }
+        ],
+        tools: ["Wireshark", "tshark", "Zeek", "Suricata", "NetworkMiner", "Brim / Zui"],
+        commands: [
+          { cmd: "zeek -r traffic.pcap && cat conn.log | zeek-cut id.orig_h id.resp_h id.resp_p proto duration orig_bytes | sort -nrk 6 | head -10", desc: "Identify top outbound bandwidth connections from Zeek connection log" },
+          { cmd: "tshark -r capture.pcap -Y 'http.request.method == \"POST\"' -T fields -e ip.src -e ip.dst -e http.host -e http.request.uri", desc: "Extract all HTTP POST request targets and URIs" },
+          { cmd: "suricata -r attack.pcap -l /var/log/suricata/ -k none", desc: "Run Suricata IDS engine against PCAP and generate eve.json alerts" }
+        ],
+        subtopics: [
+          { title: "Protocol Carving & Stream Reassembly", detail: "Reconstructing transferred files, extracting MIME attachments, reassembling fragmented TCP streams, carving HTTP transfers." },
+          { title: "Command and Control Network Signatures", detail: "Detecting periodic beacon intervals, calculating byte-count variance, detecting DNS tunneling queries via high entropy and query volume." },
+          { title: "Network Telemetry at Enterprise Scale", detail: "Combining NetFlow / IPFIX flow data with Zeek transaction logs and Suricata signature alerts to reconstruct adversary exfiltration." }
+        ],
+        knowledgeAssessment: [
+          "How do you calculate beaconing interval jitter from network flow logs?",
+          "What characteristics in DNS query logs differentiate legitimate CDN queries from DNS tunneling exfiltration?",
+          "Explain how JA3/JA3S TLS fingerprinting assists in identifying malicious clients even when traffic is encrypted.",
+          "What is the difference between full packet capture (PCAP) and session-based network metadata?"
+        ]
+      },
+      {
+        id: "mod-20",
+        num: "20",
+        title: "Incident Response and Threat Hunting",
+        whyMatters: "Move from isolated artefacts to complete incident handling and hypothesis-driven investigations.",
+        topicsStr: "Preparation; detection; analysis; containment; eradication; recovery; post-incident review; incident severity; scoping; root cause; evidence preservation; threat-hunting hypotheses; IOC/TTP/behaviour hunting; endpoint, network, identity and cloud telemetry; playbooks; lessons learned.",
+        booksStr: "NIST incident response guidance and CSF; CISA incident response resources; Microsoft hunting overview; Velociraptor documentation.",
+        coursesStr: "Hackers-Arise: Incident Response, Investigating a Cyber Attack, SOC Analyst Level 1 and Phishing Analysis. TryHackMe SOC Level 1 and CyberDefenders.",
+        practicalStr: "Investigate a simulated incident from supplied logs and PCAPs; define scope; create timeline; recommend containment and recovery actions.",
+        deliverable: "Incident response case file, timeline, scope statement and lessons-learned report.",
+        urls: [
+          { name: "CISA Incident Response", url: "https://www.cisa.gov/resources-tools/resources/incident-response" },
+          { name: "Velociraptor Docs", url: "https://docs.velociraptor.app/" },
+          { name: "NIST Cybersecurity Framework", url: "https://www.nist.gov/cyberframework" }
+        ],
+        tools: ["Velociraptor", "KAPE", "Chainsaw", "Hayabusa", "Timesketch", "CyberDefenders"],
+        commands: [
+          { cmd: "velociraptor-v0.6.9-linux-amd64 artifacts collect Windows.Detection.Amcache --output amcache.zip", desc: "Execute rapid live forensic triage collection via Velociraptor VQL" },
+          { cmd: "chainsaw hunt C:\\Windows\\System32\\winevt\\Logs\\ -s sigma_rules/ --mapping mappings/sigma-event-logs-all.yml", desc: "Rapidly hunt for adversary activity in Windows Event Logs using Sigma" },
+          { cmd: "hayabusa csv-timeline -d C:\\Windows\\System32\\winevt\\Logs\\ -o timeline.csv", desc: "Generate high-speed forensic timeline of security events" }
+        ],
+        subtopics: [
+          { title: "NIST SP 800-61 Incident Lifecycle", detail: "Preparation, Detection & Analysis, Containment Eradication & Recovery, Post-Incident Activity (Lessons Learned), severity matrices." },
+          { title: "Live Enterprise Forensics at Scale", detail: "Using Velociraptor and VQL queries to hunt across 10,000 endpoints simultaneously for specific file hashes, registry keys, or memory patterns." },
+          { title: "Root Cause & Lateral Scoping", detail: "Determining initial patient-zero endpoint, establishing boundary of compromise, tracking credential abuse across forests." }
+        ],
+        knowledgeAssessment: [
+          "What are the operational risks of immediately isolating or rebooting an endpoint during an ongoing APT intrusion?",
+          "How do you determine if an adversary has established secondary persistence outside the identified compromised host?",
+          "Explain the difference between proactive threat hunting and alert-driven incident response.",
+          "What elements must be included in an executive-level incident briefing versus a technical IR report?"
+        ]
+      },
+      {
+        id: "mod-21",
+        num: "21",
+        title: "SIEM and Detection Engineering",
+        whyMatters: "Build, test and maintain detections that identify relevant behaviours without excessive false positives.",
+        topicsStr: "Log ingestion; parsing; normalisation; enrichment; correlation; SPL; KQL; Sigma; YARA; alert design; false positives; detection-as-code; ATT&CK mapping; analytic testing; coverage gaps; purple-team validation.",
+        booksStr: "Splunk docs and training; Microsoft Defender Advanced Hunting; SigmaHQ; Elastic detection rules; Wazuh docs; Sysmon docs.",
+        coursesStr: "Hackers-Arise: Splunk for Security Monitoring, Snort for Hackers and SOC Analyst Level 1. TryHackMe SOC Level 1 and Atomic Red Team validation.",
+        practicalStr: "Deploy a small Wazuh or Splunk lab; ingest Windows/Linux telemetry; query sample events; write and test Sigma rules against safe simulations.",
+        deliverable: "SIEM lab guide, detection repository, test evidence and coverage-gap report.",
+        urls: [
+          { name: "Splunk Docs", url: "https://docs.splunk.com/" },
+          { name: "Microsoft Defender Hunting", url: "https://learn.microsoft.com/en-us/defender-xdr/advanced-hunting-overview" },
+          { name: "Sigma Rules", url: "https://sigmahq.io/" },
+          { name: "Wazuh Docs", url: "https://documentation.wazuh.com/" }
+        ],
+        tools: ["Splunk", "Elasticsearch / Kibana", "Wazuh", "Sysmon", "Sigma", "Atomic Red Team"],
+        commands: [
+          { cmd: "index=windows EventCode=4688 NewProcessName=\"*\\\\certutil.exe\" (CommandLine=\"*-urlcache*\" OR CommandLine=\"*-decode*\")", desc: "Splunk SPL: Detect certutil LOLBIN misuse for file download or decoding" },
+          { cmd: "DeviceProcessEvents | where FileName =~ \"powershell.exe\" and ProcessCommandLine has_any (\"-enc\", \"-encodedcommand\", \"IEX\", \"DownloadString\")", desc: "Microsoft Defender KQL: Detect obfuscated PowerShell execution" }
+        ],
+        subtopics: [
+          { title: "Detection-as-Code Pipeline", detail: "Managing rules in Git repositories, automated CI testing against recorded event data, automated translation from Sigma to SPL/KQL." },
+          { title: "Log Telemetry Pipelines & Parsing", detail: "Logstash, Fluentbit, Vector, normalizing disparate syslog and Event Log schemas into Open Cybersecurity Schema Framework (OCSF) or ECS." },
+          { title: "Purple Teaming & Metric Tuning", detail: "Emulating adversary atomic actions, verifying detection alerting, calculating Mean Time to Detect (MTTD), reducing false positive noise." }
+        ],
+        knowledgeAssessment: [
+          "Why is detecting behaviors (e.g., suspicious parent-child process pairs) more durable than detecting specific file names or command-line flags?",
+          "How does the OCSF (Open Cybersecurity Schema Framework) address log normalization across cloud and on-premise vendors?",
+          "What is alert fatigue and what testing standards prevent it in production SOC environments?",
+          "Explain how detection engineers test rules against benign enterprise baselines prior to deployment."
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 6 · Professional penetration testing",
+    period: "Months 24–28",
+    goal: "Develop a complete, repeatable, authorised security assessment methodology.",
+    modules: [
+      {
+        id: "mod-22",
+        num: "22",
+        title: "Professional Pentesting Methodology",
+        whyMatters: "Learn how to scope, execute, evidence and report an authorised security assessment.",
+        topicsStr: "Engagement planning; authorisation; rules of engagement; scope; asset inventory; reconnaissance; enumeration; vulnerability validation; risk rating; evidence; remediation; retesting; QA; executive and technical reports.",
+        booksStr: "NIST SP 800-115; OWASP Testing Guide; HTB CPTS path and official exam objectives; OffSec PEN-200 syllabus for comparison.",
+        coursesStr: "Hackers-Arise: Getting Started Becoming a Master Hacker, Nmap, Metasploit Basics, Advanced Metasploit, Privilege Escalation, CWE V2, CWA Prep and Advanced Hacking and Pentesting. HTB Penetration Tester path; TryHackMe Jr Penetration Tester.",
+        practicalStr: "Complete an end-to-end assessment against a deliberately vulnerable lab; maintain scope, notes, evidence, severity and remediation.",
+        deliverable: "Professional assessment report with executive summary, technical findings and retest evidence.",
+        urls: [
+          { name: "NIST SP 800-115", url: "https://csrc.nist.gov/pubs/sp/800/115/final" },
+          { name: "HTB Pentester Path", url: "https://academy.hackthebox.com/path/preview/penetration-tester" },
+          { name: "OffSec PEN-200", url: "https://www.offsec.com/courses/pen-200/" }
+        ],
+        tools: ["Nmap", "Metasploit Framework", "Burp Suite", "CherryTree / Obsidian", "Sysinternals"],
+        commands: [
+          { cmd: "nmap -sC -sV -p- -T4 -oA initial_scan_allports 10.10.10.10", desc: "Comprehensive TCP port scan with service banner detection and default scripts" },
+          { cmd: "msfconsole -q -x \"use auxiliary/scanner/smb/smb_version; set RHOSTS 10.10.10.0/24; run; exit\"", desc: "Enumerate SMB versions and OS levels across subnet" }
+        ],
+        subtopics: [
+          { title: "Rules of Engagement & Legal Boundaries", detail: "Scoping agreements, communication protocols, emergency escalation contacts, handling out-of-scope discoveries, non-disclosure agreements." },
+          { title: "Technical Methodology (PTES & NIST SP 800-115)", detail: "Pre-engagement interactions, intelligence gathering, threat modeling, vulnerability analysis, exploitation, post-exploitation, reporting." },
+          { title: "Executive & Technical Reporting", detail: "Risk calculation using CVSS v3.1 / v4.0, business impact narrative, writing actionable remediation guidance for developers and sysadmins." }
+        ],
+        knowledgeAssessment: [
+          "What is the legal difference between an authorized penetration test and unauthorized security scanning?",
+          "How do you calculate a finding's severity when technical exploitability is trivial but actual business data impact is minimal?",
+          "What immediate actions must a pentester take if evidence of a pre-existing unauthorized intrusion is encountered during an assessment?",
+          "Why is verification and re-testing essential to the penetration testing lifecycle?"
+        ]
+      },
+      {
+        id: "mod-23",
+        num: "23",
+        title: "Web Application Security",
+        whyMatters: "Understand web architecture and systematically test common and advanced application vulnerabilities.",
+        topicsStr: "HTTP; browser security; cookies and sessions; authentication and authorisation; SOP and CORS; CSP; SQLi; XSS; CSRF; SSRF; XXE; SSTI; path traversal; file upload; command injection; IDOR; JWT/OAuth weaknesses; business logic; request smuggling; cache poisoning; deserialisation; GraphQL; race conditions.",
+        booksStr: "PortSwigger Web Security Academy: essential skills, authentication, access control, SQLi, XSS, SSRF, XXE, CSRF, file upload, request smuggling, cache attacks, deserialisation, GraphQL and business logic. OWASP WSTG and ASVS.",
+        coursesStr: "Hackers-Arise: Web App Hacking, Advanced Web App Hacking, Bug Bounty Training, Hacking APIs and Database Hacking. HTB Web Penetration Tester path. TryHackMe web challenges.",
+        practicalStr: "Complete PortSwigger labs from Apprentice to Expert; document root cause, safe reproduction, impact and remediation. Use only training targets and authorised scopes.",
+        deliverable: "Web security testing notebook with lab evidence, root-cause explanations and remediation guidance.",
+        urls: [
+          { name: "PortSwigger Learning Paths", url: "https://portswigger.net/web-security/learning-paths" },
+          { name: "OWASP WSTG", url: "https://owasp.org/www-project-web-security-testing-guide/" },
+          { name: "OWASP ASVS", url: "https://owasp.org/www-project-application-security-verification-standard/" }
+        ],
+        tools: ["Burp Suite Professional", "Caido", "OWASP ZAP", "ffuf", "sqlmap", "Turbo Intruder"],
+        commands: [
+          { cmd: "ffuf -w wordlist.txt -u https://target.com/FUZZ -mc 200,301,302 -fc 404", desc: "Fuzz web directories and endpoints with response code filtering" },
+          { cmd: "sqlmap -r request.txt --batch --dbs --level=2 --risk=1", desc: "Automate SQL injection parameter detection from raw HTTP request file" }
+        ],
+        subtopics: [
+          { title: "Browser Security Model & Token Security", detail: "Same-Origin Policy (SOP), Cross-Origin Resource Sharing (CORS) misconfigurations, Content Security Policy (CSP) bypasses, HttpOnly/Secure flags." },
+          { title: "Server-Side Flaws (SSRF, Deserialization, SSTI)", detail: "Server-Side Request Forgery against cloud metadata endpoints (169.254.169.254), template injection in Jinja2/Twig, insecure object deserialization." },
+          { title: "Advanced Web Vulnerabilities (HTTP Smuggling & Race Conditions)", detail: "CL.TE and TE.CL desync attacks, HTTP/2 downgrading anomalies, exploiting race conditions using Burp Turbo Intruder." }
+        ],
+        knowledgeAssessment: [
+          "Explain why CORS headers cannot protect an unauthenticated internal API from unauthorized client-side access.",
+          "How does parameterized SQL (prepared statements) fundamentally prevent SQL injection at the parser level?",
+          "Describe how an attacker exploits an SSRF vulnerability to retrieve IAM credentials from AWS EC2 metadata.",
+          "What causes an HTTP Request Smuggling vulnerability when a front-end reverse proxy forwards requests to a back-end web server?"
+        ]
+      },
+      {
+        id: "mod-24",
+        num: "24",
+        title: "API Security",
+        whyMatters: "Assess REST, GraphQL and identity-backed APIs systematically.",
+        topicsStr: "REST, SOAP, GraphQL; HTTP methods; JSON/XML; OpenAPI; API discovery; authentication; authorisation; BOLA; BFLA; mass assignment; excessive data exposure; rate limits; JWT; OAuth; server-side parameter pollution; API gateway; logging and inventory.",
+        booksStr: "OWASP API Security Top 10; PortSwigger API testing path; OpenAPI specification; vendor API security docs.",
+        coursesStr: "Hackers-Arise: Hacking APIs, Web App Hacking and Advanced Web App Hacking. HTB web/API modules and PortSwigger API testing.",
+        practicalStr: "Use intentionally vulnerable API labs; map endpoints and roles; validate object/function authorisation and document fixes.",
+        deliverable: "API inventory, test cases, findings and remediation report.",
+        urls: [
+          { name: "OWASP API Security", url: "https://owasp.org/www-project-api-security/" },
+          { name: "PortSwigger API Path", url: "https://portswigger.net/web-security/learning-paths/api-testing" },
+          { name: "OpenAPI Specification", url: "https://spec.openapis.org/oas/latest.html" }
+        ],
+        tools: ["Postman", "Burp Suite", "GraphQL Voyager", "InQL", "Kiterunner", "jwt_tool"],
+        commands: [
+          { cmd: "kr scan https://api.target.com/ -w routes-large.kite -x 20", desc: "Discover hidden API endpoints and routing paths using Kiterunner" },
+          { cmd: "python3 jwt_tool.py <TOKEN> -X a", desc: "Automate common JWT tampering attacks (alg:none, weak HMAC key, spoofing)" }
+        ],
+        subtopics: [
+          { title: "OWASP API Security Top 10 (BOLA / BFLA)", detail: "Broken Object Level Authorization (IDOR at API level), Broken Function Level Authorization (admin endpoint access), Mass Assignment of internal attributes." },
+          { title: "JWT & OAuth 2.0 Security Architecture", detail: "Header injection, key confusion attacks (RS256 to HS256), JWKS spoofing, OAuth redirect_uri validation flaws, token replay." },
+          { title: "GraphQL Security Testing", detail: "Introspection query extraction, batching query DoS, field suggestion reconnaissance, circular query depth limits." }
+        ],
+        knowledgeAssessment: [
+          "What is the difference between BOLA (Broken Object Level Authorization) and BFLA (Broken Function Level Authorization)?",
+          "Explain the RS256 to HS256 key confusion attack on JSON Web Tokens.",
+          "How does Mass Assignment allow a normal user to escalate privileges during a profile update API request?",
+          "Why should GraphQL introspection be disabled in production environments?"
+        ]
+      },
+      {
+        id: "mod-25",
+        num: "25",
+        title: "Network and Infrastructure Pentesting",
+        whyMatters: "Assess network services and infrastructure within explicit scope and document risk accurately.",
+        topicsStr: "Asset discovery; service identification; enumeration; SSH, SMB, DNS, SMTP, SNMP and database security; web servers; firewall/VPN; segmentation; Linux/Windows server configuration; vulnerability assessment; evidence and remediation.",
+        booksStr: "Nmap reference guide; HTB CPTS modules; NIST testing guide; vendor hardening guides.",
+        coursesStr: "Hackers-Arise: Network Basics, Infrastructure Basics, Nmap, Metasploit Basics, Advanced Metasploit, Linux Firewalls, VPN and Router Hacking. HTB Penetration Tester path.",
+        practicalStr: "Use isolated lab services and deliberately vulnerable hosts; perform authorised discovery, service review and configuration assessment.",
+        deliverable: "Infrastructure assessment report and hardening checklist.",
+        urls: [
+          { name: "Nmap Reference", url: "https://nmap.org/book/man.html" },
+          { name: "HTB Pentester Path", url: "https://academy.hackthebox.com/path/preview/penetration-tester" },
+          { name: "CIS Benchmarks", url: "https://www.cisecurity.org/cis-benchmarks" }
+        ],
+        tools: ["Nmap", "Masscan", "NetExec (nxc)", "snmpwalk", "Responder", "enum4linux-ng"],
+        commands: [
+          { cmd: "nxc smb 192.168.1.0/24 --gen-relay-list relay_targets.txt", desc: "Identify all network hosts with SMB Signing disabled for NTLM relaying" },
+          { cmd: "snmpwalk -v2c -c public 192.168.1.50 1.3.6.1.2.1.25.4.2.1.2", desc: "Extract running system process names via SNMP MIB enumeration" },
+          { cmd: "responder -I eth0 -dwv", desc: "Capture LLMNR, NBT-NS, and mDNS authentication requests on local subnet" }
+        ],
+        subtopics: [
+          { title: "Service-Specific Deep Enumeration", detail: "SMB null sessions and guest access, RPC endpoint mapping, SNMP community string brute-forcing and MIB walking, SMTP user enumeration (VRFY/EXPN)." },
+          { title: "Network Poisoning & NTLM Relaying", detail: "LLMNR / NBT-NS spoofing, WPAD abuse, NTLM relay attacks against SMB signing-disabled hosts, LDAP relaying to ADCS." },
+          { title: "Network Segmentation & Egress Testing", detail: "Validating firewall rules, testing VLAN hopping and pivot tunnels via SSH/SOCKS, identifying open egress ports." }
+        ],
+        knowledgeAssessment: [
+          "Under what conditions is an NTLM authentication exchange relayable to an SMB target?",
+          "How does SNMPv3 resolve the authentication and privacy vulnerabilities of SNMPv1 and SNMPv2c?",
+          "What is the security risk of leaving SMB Signing disabled on domain member servers?",
+          "How do you safely test for default database credentials without causing account lockouts?"
+        ]
+      },
+      {
+        id: "mod-26",
+        num: "26",
+        title: "Linux and Windows Privilege Escalation",
+        whyMatters: "Understand local security boundaries and identify configuration weaknesses in training systems.",
+        topicsStr: "Linux users/groups, sudo policy, SUID/SGID, capabilities, cron/systemd, writable paths, service configuration, containers and kernel hardening; Windows tokens, service permissions, registry ACLs, scheduled tasks, UAC, stored credentials, local groups, Defender, Credential Guard and LAPS.",
+        booksStr: "HTB Linux and Windows privilege escalation modules; GTFOBins and LOLBAS as reference catalogues; Microsoft and Linux hardening documentation.",
+        coursesStr: "Hackers-Arise: Privilege Escalation, Advanced Linux, PowerShell and Active Directory. TryHackMe Linux/Windows PrivEsc rooms.",
+        practicalStr: "Complete vulnerable training machines; explain the root cause and remediation for each finding; do not apply techniques outside the lab.",
+        deliverable: "Privilege escalation assessment notebook with configuration evidence and fixes.",
+        urls: [
+          { name: "GTFOBins", url: "https://gtfobins.github.io/" },
+          { name: "LOLBAS", url: "https://lolbas-project.github.io/" },
+          { name: "Windows Security Docs", url: "https://learn.microsoft.com/en-us/windows/security/" }
+        ],
+        tools: ["LinPEAS", "WinPEAS", "GTFOBins", "LOLBAS", "PrivescCheck", "accesschk.exe"],
+        commands: [
+          { cmd: "sudo -l", desc: "List allowed sudo commands and environment options for current user" },
+          { cmd: "accesschk.exe /accepteula -uwcqv \"Authenticated Users\" *", desc: "Find Windows services with weak permissions that can be modified by standard users" },
+          { cmd: "Get-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Services\\*' | Where-Object ImagePath -notlike '\"*\"' | Where-Object ImagePath -like '* *'", desc: "Locate unquoted Windows service paths containing spaces" }
+        ],
+        subtopics: [
+          { title: "Linux Privilege Escalation Vectors", detail: "Abusing sudo rights (LD_PRELOAD, shell escapes via GTFOBins), misconfigured SUID binaries, writable /etc/passwd or cron scripts, kernel exploits." },
+          { title: "Windows Service & Registry Misconfigurations", detail: "Unquoted service paths, weak service DACLs (SERVICE_CHANGE_CONFIG), AlwaysInstallElevated registry keys, weak DLL search order." },
+          { title: "Token Abuse & UAC Bypass Techniques", detail: "Abusing SeImpersonatePrivilege via Potato exploits (Juicy/Sweet/PrintPotato), auto-elevating mock COM objects for UAC bypass." }
+        ],
+        knowledgeAssessment: [
+          "Why is an unquoted service path with spaces in C:\\Program Files\\... exploitable by a standard user if the parent directory is writable?",
+          "How does an attacker with SeImpersonatePrivilege escalate to NT AUTHORITY\\SYSTEM?",
+          "What is the danger of granting NOPASSWD sudo access to an administrative utility like vim or less?",
+          "How does Windows Credential Guard protect LSASS memory against local administrative dump tools?"
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 7 · Enterprise security and advanced Red Team",
+    period: "Months 29–33",
+    goal: "Combine threat intelligence, identity, cloud, vulnerability research and safe adversary emulation.",
+    modules: [
+      {
+        id: "mod-27",
+        num: "27",
+        title: "Advanced Active Directory Security",
+        whyMatters: "Assess complex identity environments and understand cross-domain and hybrid identity risks.",
+        topicsStr: "Multi-domain forests; trusts; Kerberos; NTLM; ADCS; delegation; ACLs; GPO; privileged groups; service accounts; Domain Controller hardening; Entra ID; hybrid identity; RBAC; PIM; identity governance; monitoring and remediation.",
+        booksStr: "HTB Active Directory Penetration Tester path; Microsoft AD DS, ADCS and Entra documentation; CRTP/CRTE syllabi for learning objectives.",
+        coursesStr: "Hackers-Arise: Active Directory for Hackers and PowerShell for Hackers. HTB AD path is the primary practical track.",
+        practicalStr: "Build an isolated multi-machine lab; assess identity configuration and permissions; validate findings safely; implement and retest remediation.",
+        deliverable: "Enterprise AD assessment and identity-hardening report.",
+        urls: [
+          { name: "HTB AD Path", url: "https://academy.hackthebox.com/path/preview/active-directory-penetration-tester" },
+          { name: "Microsoft Entra", url: "https://learn.microsoft.com/en-us/entra/identity/" },
+          { name: "AD CS Documentation", url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/" }
+        ],
+        tools: ["Certipy", "BloodHound", "Rubeus", "Mimikatz", "Powerview", "PKINITtools"],
+        commands: [
+          { cmd: "certipy find -u user@corp.local -p 'Pass123' -dc-ip 10.10.10.1 -vulnerable", desc: "Audit Active Directory Certificate Services (ADCS) for vulnerable certificate templates (ESC1-ESC13)" },
+          { cmd: "certipy req -u user@corp.local -p 'Pass123' -ca CORP-CA -template ESC1Template -upn administrator@corp.local", desc: "Request certificate impersonating Domain Administrator via misconfigured SAN template" },
+          { cmd: "Rubeus.exe asktgt /user:administrator /certificate:admin.pfx /password:certpass /ptt", desc: "Request Kerberos TGT using certificate authentication (PKINIT) and inject into current session" }
+        ],
+        subtopics: [
+          { title: "ADCS Abuse Vectors (Certified Pre-Owned)", detail: "ESC1 (client auth + SAN modification), ESC2 (any-purpose EKU), ESC3 (certificate request agent), ESC4 (template DACL overwrite), ESC8 (NTLM relay to HTTP enrollment)." },
+          { title: "Kerberos Delegation & Cross-Forest Trusts", detail: "Constrained delegation abuse (S4U2self / S4U2proxy), Resource-Based Constrained Delegation (RBCD), SID Filtering and SID History abuse across trusts." },
+          { title: "Hybrid Identity & Cloud Pivoting", detail: "Password Hash Sync (PHS) vs Pass-Through Authentication (PTA), Azure AD Connect sync account abuse (MSOL_*), Primary Refresh Token (PRT) theft." }
+        ],
+        knowledgeAssessment: [
+          "Explain the misconfiguration that creates an ADCS ESC1 vulnerability and how it allows full forest takeover.",
+          "How does Resource-Based Constrained Delegation (RBCD) allow compromise of a target computer account?",
+          "What is SID History filtering and why does it prevent privilege escalation across external forest trusts?",
+          "How does an attacker with local administrator rights on an Azure AD Connect server extract synchronization credentials?"
+        ]
+      },
+      {
+        id: "mod-28",
+        num: "28",
+        title: "Cloud Security: AWS, Azure and GCP",
+        whyMatters: "Understand cloud control planes, identity, networks, logging and secure configuration before cloud assessments.",
+        topicsStr: "AWS IAM, STS, Organizations, VPC, EC2, S3, CloudTrail, GuardDuty, Config, KMS, Secrets Manager and EKS; Azure Entra, RBAC, managed identities, VNet, Key Vault, Defender, Sentinel and Activity Logs; GCP IAM, service accounts, VPC, Cloud Logging, KMS and Security Command Center; Docker and Kubernetes security.",
+        booksStr: "AWS Skill Builder; Microsoft Learn Azure; Google Cloud Skills Boost; provider security documentation; Kubernetes security concepts.",
+        coursesStr: "Hackers-Arise: CCSP+ and CISSP bootcamp only as supplementary governance content. Main study must use provider labs and official docs.",
+        practicalStr: "Build a controlled cloud account/project; configure least privilege, logging and encryption; investigate supplied cloud events; track and remove billable resources.",
+        deliverable: "Cloud security architecture diagram, IAM review and logging/monitoring assessment.",
+        urls: [
+          { name: "AWS Skill Builder", url: "https://skillbuilder.aws/" },
+          { name: "Microsoft Learn", url: "https://learn.microsoft.com/en-us/training/azure/" },
+          { name: "Google Cloud Skills Boost", url: "https://www.cloudskillsboost.google/" },
+          { name: "Kubernetes Security", url: "https://kubernetes.io/docs/concepts/security/" }
+        ],
+        tools: ["ScoutSuite", "Prowler", "CloudFox", "Pacu", "Trivy", "Checkov", "kubectl"],
+        commands: [
+          { cmd: "cloudfox aws --profile target-account-profile all-checks", desc: "Execute rapid cloud infrastructure permission and asset enumeration" },
+          { cmd: "prowler aws --compliance cis_aws_foundations_benchmark", desc: "Audit AWS tenant against CIS Foundations security benchmark" },
+          { cmd: "kubectl auth can-i create pods --as system:serviceaccount:default:sa-test", desc: "Verify RBAC permissions for Kubernetes service account" }
+        ],
+        subtopics: [
+          { title: "Cloud Identity & Access Management (IAM)", detail: "AWS IAM policies (Identity-based vs Resource-based), STS AssumeRole, Azure RBAC roles and Managed Identities, GCP IAM service account impersonation." },
+          { title: "Cloud Control Plane Privilege Escalation", detail: "Abusing CreatePolicyVersion, SetDefaultPolicyVersion, AttachUserPolicy, PassRole to EC2/Lambda in AWS; Contributor role abuse in Azure." },
+          { title: "Container & Kubernetes Security", detail: "Container breakouts via privileged containers, Docker socket mount exposure, Kubernetes RBAC misconfigurations, securing etcd and API server." }
+        ],
+        knowledgeAssessment: [
+          "Explain how an IAM principal with iam:PassRole and ec2:RunInstances permissions can achieve full administrative takeover.",
+          "What is an AWS Instance Profile and how does the IMDSv2 token challenge prevent SSRF credential theft?",
+          "How does an Azure Managed Identity authenticate without storing long-term credentials in code?",
+          "What risks occur when mounting the host `/var/run/docker.sock` inside a non-privileged container?"
+        ]
+      },
+      {
+        id: "mod-29",
+        num: "29",
+        title: "Vulnerability Research and Exploit Development Foundations",
+        whyMatters: "Learn to understand root causes, reproduce bugs safely in toy environments and recommend fixes.",
+        topicsStr: "C memory model; bounds errors; stack/heap; integer overflow; use-after-free; double free; format strings; race conditions; fuzzing; crash triage; debugging; patch analysis; CWE/CVE/CVSS; ASLR, DEP/NX, stack canaries and control-flow protections; responsible disclosure.",
+        booksStr: "OST2 low-level courses; pwn.college; Google fuzzing resources; CWE catalogue; Project Zero technical research; secure coding references.",
+        coursesStr: "Hackers-Arise: x86 Assembly, Exploit Development I and II, Advanced Hacking and Pentesting. Do this only after C, assembly and debugging foundations.",
+        practicalStr: "Use toy programs and deliberately vulnerable training binaries; fuzz a local sample; triage a crash; explain and patch the underlying bug.",
+        deliverable: "Vulnerability root-cause report, safe reproducer and remediation patch for a toy program.",
+        urls: [
+          { name: "pwn.college", url: "https://pwn.college/" },
+          { name: "Google Fuzzing", url: "https://google.github.io/fuzzing/" },
+          { name: "CWE", url: "https://cwe.mitre.org/" },
+          { name: "Project Zero", url: "https://github.com/googleprojectzero" }
+        ],
+        tools: ["GDB (pwndbg/gef)", "pwntools", "AFL++", "Ropper", "checksec", "Compiler Explorer"],
+        commands: [
+          { cmd: "checksec --file=./target_binary", desc: "Inspect binary protections (RELRO, Stack Canary, NX, PIE, Fortify)" },
+          { cmd: "ropper --file ./target_binary --search \"pop rdi; ret\"", desc: "Search binary for Return-Oriented Programming (ROP) gadgets" },
+          { cmd: "afl-fuzz -i testcases/ -o findings/ -- ./target_binary @@", desc: "Run AFL++ coverage-guided fuzzing on binary with test input corpus" }
+        ],
+        subtopics: [
+          { title: "Memory Corruption Vulnerability Classes", detail: "Stack buffer overflows, heap metadata corruption, Use-After-Free (UAF), Double Free, Integer Overflows leading to signed/unsigned bounds errors." },
+          { title: "Binary Mitigation Mechanics", detail: "Address Space Layout Randomization (ASLR), Data Execution Prevention (DEP / NX), Stack Canaries (__stack_chk_fail), Full RELRO." },
+          { title: "Modern Exploit Techniques (ROP)", detail: "Return-Oriented Programming (ROP), chaining gadgets to set up register arguments, calling mprotect or VirtualProtect to bypass NX." }
+        ],
+        knowledgeAssessment: [
+          "Explain why Stack Canaries fail to protect against arbitrary read/write vulnerabilities.",
+          "How does Return-Oriented Programming (ROP) bypass Data Execution Prevention (DEP/NX)?",
+          "What causes a Use-After-Free vulnerability at the heap allocation level?",
+          "Explain how an integer overflow can bypass a buffer size validation check."
+        ]
+      },
+      {
+        id: "mod-30",
+        num: "30",
+        title: "Red Team Operations and Adversary Emulation",
+        whyMatters: "Plan and run controlled, threat-informed simulations that test security controls and produce actionable findings.",
+        topicsStr: "Red Team vs pentest vs Purple Team; authorisation; objectives; rules of engagement; threat intelligence; adversary selection; ATT&CK mapping; emulation design; infrastructure security; operational safety; test execution; telemetry; detection validation; evidence; remediation; retest and executive reporting.",
+        booksStr: "MITRE ATT&CK; CALDERA; Atomic Red Team; SANS SEC565 syllabus; NIST testing and risk guidance; HTB Red Team-related content.",
+        coursesStr: "Hackers-Arise: Red Team Operator Part I, Cyber Defense from a Military Perspective, MITRE ATT&CK and Advanced Hacking and Pentesting. HTB enterprise and AD paths; TryHackMe Red Teaming path.",
+        practicalStr: "Design an approved emulation plan for a fictional enterprise; select safe Atomic tests; collect telemetry; coordinate a Purple Team review; document detection gaps.",
+        deliverable: "Threat-informed exercise plan, ATT&CK mapping, detection validation report and remediation plan.",
+        urls: [
+          { name: "MITRE CALDERA", url: "https://caldera.mitre.org/" },
+          { name: "Atomic Red Team", url: "https://github.com/redcanaryco/atomic-red-team" },
+          { name: "ATT&CK", url: "https://attack.mitre.org/" },
+          { name: "SANS SEC565", url: "https://www.sans.org/cyber-security-courses/red-team-operations-adversary-emulation/" }
+        ],
+        tools: ["CALDERA", "Atomic Red Team", "Sliver C2", "Havoc C2", "VECTR", "ATT&CK Navigator"],
+        commands: [
+          { cmd: "sliver-server", desc: "Launch secure cross-platform adversary emulation and C2 server" },
+          { cmd: "python3 caldera.py --insecure", desc: "Start MITRE CALDERA automated adversary emulation framework" }
+        ],
+        subtopics: [
+          { title: "Threat-Informed Operation Planning", detail: "Developing operation plans based on real APT threat intelligence, setting crown-jewel objectives, creating defensive deconfliction mechanisms." },
+          { title: "Secure Red Team Infrastructure", detail: "Multi-tier redirectors (HTTP, DNS, SMB), frontend reverse proxies with IP filtering, separating staging from operational C2 infrastructure." },
+          { title: "Purple Teaming & VECTR Assessment", detail: "Collaborative testing with defensive teams, logging test cases in VECTR, measuring alert generation vs preventive control blocking." }
+        ],
+        knowledgeAssessment: [
+          "How does a threat-informed Red Team engagement differ fundamentally from a standard penetration test?",
+          "What is an emergency \"White Card\" in Rules of Engagement, and when is it invoked?",
+          "How does an operator configure operational redirectors to protect backend C2 server IP addresses?",
+          "What metrics demonstrate actual improvement in defensive posture following a Purple Team exercise?"
+        ]
+      }
+    ]
+  },
+  {
+    name: "Phase 8 · Expert specialisations and original research",
+    period: "Month 34 onward",
+    goal: "Choose a primary speciality, publish original work and develop advanced professional judgement.",
+    modules: [
+      {
+        id: "mod-31",
+        num: "31",
+        title: "Advanced Malware Research",
+        whyMatters: "Develop a specialist capability in malware family analysis and evidence-backed technical research.",
+        topicsStr: "Family clustering; campaign correlation; configuration extraction; PE/ELF internals; memory-resident indicators; cryptographic routine recognition; behavioural analysis; YARA; detection engineering; attribution limitations; reproducible reporting.",
+        booksStr: "REMnux, FLARE-VM, Ghidra, capa, FLOSS, YARA, CyberDefenders, vendor research reports and relevant academic papers.",
+        coursesStr: "Hackers-Arise: Reverse Engineering Malware I–III, Ransomware Training and Memory Forensics.",
+        practicalStr: "Analyse safe datasets, compare family behaviours, build tested rules and explain confidence/limitations.",
+        deliverable: "Original malware research paper and reproducible detection package.",
+        urls: [
+          { name: "REMnux", url: "https://docs.remnux.org/" },
+          { name: "Ghidra", url: "https://ghidra-sre.org/" },
+          { name: "YARA", url: "https://yara.readthedocs.io/" }
+        ],
+        tools: ["Ghidra", "x64dbg", "IDA Pro / Free", "PE-bear", "YARA", "FLOSS"],
+        commands: [
+          { cmd: "python3 config_extractor.py sample.bin", desc: "Extract embedded C2 server list and encryption keys from packed loader" }
+        ],
+        subtopics: [
+          { title: "Custom Crypters & Unpacking Stagers", detail: "Manual unpacking via x64dbg, locating the Original Entry Point (OEP), dumping reconstructed PE files, rebuilding Import Address Tables." },
+          { title: "Malware Configuration Extraction", detail: "Automating payload decryption routines in Python, extracting embedded AES keys, C2 domain lists, and campaign campaign IDs." },
+          { title: "Kernel-Mode Rootkit Analysis", detail: "Analyzing Windows kernel drivers (.sys), Direct Kernel Object Manipulation (DKOM), hooking the SSDT, bypassing driver signature enforcement." }
+        ],
+        knowledgeAssessment: [
+          "Explain the process of locating the Original Entry Point (OEP) in a packed executable using x64dbg.",
+          "How do you automate config extraction across hundreds of samples of a specific malware family?",
+          "What protections does Windows Driver Signature Enforcement (DSE) provide, and how have adversaries bypassed it (BYOVD)?",
+          "What is the difference between an inline hook and an IAT hook?"
+        ]
+      },
+      {
+        id: "mod-32",
+        num: "32",
+        title: "Advanced DFIR and Threat Hunting",
+        whyMatters: "Investigate complex incidents across endpoint, network, identity and cloud telemetry.",
+        topicsStr: "Enterprise collection; timeline correlation; memory/disk/network correlation; identity compromise; cloud incidents; hypothesis-driven hunting; detection engineering; evidence integrity; attribution confidence; executive and technical reporting.",
+        booksStr: "Velociraptor; Volatility 3; Autopsy; KAPE; Plaso; Timesketch; CyberDefenders; NIST/CISA guidance.",
+        coursesStr: "Hackers-Arise: Advanced Digital Forensics, Memory Forensics, Network Forensics, Incident Response and Investigating a Cyber Attack.",
+        practicalStr: "Complete multi-source investigation challenges and write reproducible incident timelines with evidence citations.",
+        deliverable: "Full DFIR case study and threat-hunting playbook.",
+        urls: [
+          { name: "Velociraptor", url: "https://docs.velociraptor.app/" },
+          { name: "Volatility", url: "https://volatility3.readthedocs.io/" },
+          { name: "CyberDefenders", url: "https://cyberdefenders.org/" }
+        ],
+        tools: ["Velociraptor", "Timesketch", "Plaso", "Volatility 3", "KAPE"],
+        commands: [
+          { cmd: "timesketch_importer --sketch_id 1 -n 'Investigation' timeline.plaso", desc: "Upload multi-source timeline into Timesketch for collaborative investigation" }
+        ],
+        subtopics: [
+          { title: "Enterprise-Wide Forensic Hunts", detail: "Writing custom VQL artifacts for Velociraptor, hunting across distributed fleets for ephemeral adversary presence." },
+          { title: "Multi-Source Timeline Correlation", detail: "Aligning CloudTrail, Azure sign-in logs, host MFT records, and network flows into a single unified chronological narrative." },
+          { title: "Cloud & Container DFIR", detail: "Acquiring memory from running Kubernetes pods, analyzing AWS EBS snapshot volumes, carving AWS CloudTrail for stolen session usage." }
+        ],
+        knowledgeAssessment: [
+          "How do you establish evidence integrity when analyzing virtual machine snapshots and cloud storage volumes?",
+          "Explain how clock skew between servers is calculated and normalized during forensic timeline construction.",
+          "What artifacts indicate token theft in a hybrid Azure AD / Entra ID compromise?",
+          "How do you prove that an attacker successfully accessed specific sensitive files rather than merely enumerating the directory?"
+        ]
+      },
+      {
+        id: "mod-33",
+        num: "33",
+        title: "Mobile and IoT Security",
+        whyMatters: "Understand mobile application, firmware, embedded and wireless security at a specialist level.",
+        topicsStr: "Android architecture, APK, manifest, permissions, Binder, sandbox, Keystore; iOS sandbox, entitlements, Keychain and code signing; firmware; UART, JTAG, SPI, I2C; MQTT, CoAP, BLE, Zigbee; secure boot; mobile/IoT forensics.",
+        booksStr: "OWASP MAS, MASTG, embedded application security guidance, vendor firmware docs and controlled device labs.",
+        coursesStr: "Hackers-Arise: Mobile Hacking, Android Hacking, Mobile Forensics, Bluetooth Hacking, IoT Hacking, IP Camera Hacking, Smart Home Hacking, Car Hacking and Drone Hacking. Treat RF/satellite/cellular courses as separate advanced specialisations.",
+        practicalStr: "Use emulators, intentionally vulnerable mobile apps, owned development boards and firmware images released for research. Do not test third-party devices without permission.",
+        deliverable: "Mobile or IoT security assessment with reproducible evidence and remediation.",
+        urls: [
+          { name: "OWASP MAS", url: "https://mas.owasp.org/" },
+          { name: "OWASP MASTG", url: "https://github.com/OWASP/owasp-mastg" },
+          { name: "OWASP Embedded", url: "https://owasp.org/www-project-embedded-application-security/" }
+        ],
+        tools: ["MobSF", "Frida", "Objection", "Binwalk", "Ghidra", "APKTool"],
+        commands: [
+          { cmd: "binwalk -Me firmware.bin", desc: "Extract embedded filesystem, bootloader, and compressed kernels from firmware image" },
+          { cmd: "frida -U -f com.example.app -l hook.js --no-pause", desc: "Launch Android app under instrumentation and hook target crypto methods" },
+          { cmd: "objection -g com.example.app explore", desc: "Interactive mobile security exploration and SSL pinning bypass" }
+        ],
+        subtopics: [
+          { title: "Android / iOS Security Model", detail: "App sandboxing, UID separation, IPC via Binder, Android Keystore vs iOS Secure Enclave, certificate pinning." },
+          { title: "Dynamic Instrumentation with Frida", detail: "Hooking Java and native C functions in real-time, bypassing biometrics, intercepting encrypted network traffic." },
+          { title: "Firmware Reverse Engineering & Hardware Debugging", detail: "Carving firmware images with binwalk, identifying hardcoded credentials, inspecting UART/JTAG serial pinouts on PCBs." }
+        ],
+        knowledgeAssessment: [
+          "How does Frida hook native shared library functions in an Android application?",
+          "Explain the difference between Android Keystore hardware-backed keys and software-backed keys.",
+          "What security risks arise from leaving a UART root console enabled on an IoT device's circuit board?",
+          "How do developers implement robust certificate pinning, and how can an analyst bypass it in an authorized assessment?"
+        ]
+      },
+      {
+        id: "mod-34",
+        num: "34",
+        title: "Supply Chain and CI/CD Security",
+        whyMatters: "Understand how code, dependencies, build systems and artifacts can introduce security risk.",
+        topicsStr: "Dependency confusion and typosquatting concepts; package registries; CI/CD identity; GitHub Actions; GitLab CI; secrets; build provenance; signing; SBOM; SLSA; Sigstore; container image security; artifact integrity; pipeline logging.",
+        booksStr: "OWASP CI/CD Top 10; SLSA; Sigstore; CISA SBOM resources; GitHub and GitLab security docs.",
+        coursesStr: "Use Hackers-Arise infrastructure and risk-management courses only as supplementary context; primary learning comes from standards and vendor documentation.",
+        practicalStr: "Build a sample pipeline for a toy project; generate an SBOM; sign an artifact; review permissions and secret handling.",
+        deliverable: "CI/CD threat model, SBOM and pipeline hardening report.",
+        urls: [
+          { name: "OWASP CI/CD Top 10", url: "https://owasp.org/www-project-top-10-ci-cd-security-risks/" },
+          { name: "SLSA Framework", url: "https://slsa.dev/" },
+          { name: "Sigstore", url: "https://www.sigstore.dev/" },
+          { name: "CISA SBOM", url: "https://www.cisa.gov/sbom" }
+        ],
+        tools: ["Syft", "Grype", "Cosign", "Semgrep", "Checkov", "Trivy"],
+        commands: [
+          { cmd: "syft packages target-image:latest -o spdx-json=sbom.json", desc: "Generate Software Bill of Materials (SBOM) in SPDX JSON format" },
+          { cmd: "cosign sign --key cosign.key target-image:latest", desc: "Digitally sign container image artifact with cryptographic signature" },
+          { cmd: "semgrep scan --config p/ci-cd .", desc: "Scan CI/CD configuration files for insecure runner privileges and secret leaks" }
+        ],
+        subtopics: [
+          { title: "CI/CD Pipeline Attack Vectors (OWASP Top 10)", detail: "Poisoned Pipeline Execution (PPE), runner compromise, insecure runner permissions (GITHUB_TOKEN write access), artifact tampering." },
+          { title: "Dependency Attacks & Package Registries", detail: "Dependency confusion, typosquatting, malicious open-source package updates, automated lockfile poisoning." },
+          { title: "SLSA & Cryptographic Supply Chain Integrity", detail: "Supply chain Levels for Software Artifacts (SLSA), generating tamper-evident build provenance, signing with Sigstore/Cosign." }
+        ],
+        knowledgeAssessment: [
+          "Explain how Dependency Confusion attacks trick build systems into pulling untrusted public packages.",
+          "What is Poisoned Pipeline Execution (PPE) and how does a contributor exploit unreviewed pull request workflows?",
+          "How does cryptographic artifact signing with Cosign prevent registry compromise from deploying malicious images?",
+          "What is the difference between an SBOM and a standard dependency manifest?"
+        ]
+      },
+      {
+        id: "mod-35",
+        num: "35",
+        title: "Cryptography and Post-Quantum Cryptography",
+        whyMatters: "Build mathematical and practical understanding of modern cryptography and migration to post-quantum standards.",
+        topicsStr: "Number theory; modular arithmetic; finite fields; RSA; Diffie-Hellman; ECC; signatures; hashes; HMAC; TLS; PKI; quantum computing basics; Shor and Grover concepts; lattices; ML-KEM; ML-DSA; SLH-DSA; hybrid key exchange; crypto agility and migration planning.",
+        booksStr: "NIST PQC project and standards; CryptoHack for practice; RFCs; introductory number theory and cryptography texts.",
+        coursesStr: "Hackers-Arise: Cryptography Basics, Intermediate Cryptography and Preparing Your Network for the Post-Quantum World.",
+        practicalStr: "Complete cryptography exercises; inspect TLS configurations; build a PQC inventory and migration assessment for a fictional organisation.",
+        deliverable: "PQC migration report with algorithm inventory, risk assessment and recommendations.",
+        urls: [
+          { name: "NIST PQC Project", url: "https://csrc.nist.gov/projects/post-quantum-cryptography" },
+          { name: "CryptoHack", url: "https://cryptohack.org/" },
+          { name: "RFC Editor", url: "https://www.rfc-editor.org/" }
+        ],
+        tools: ["OpenSSL 3.x", "CryptoHack", "testssl.sh", "CyberChef", "SageMath"],
+        commands: [
+          { cmd: "openssl list -kem-algorithms", desc: "Display post-quantum Key Encapsulation Mechanisms supported in OpenSSL 3.x" },
+          { cmd: "testssl.sh --pqc https://target.com", desc: "Audit target TLS web server for post-quantum hybrid key exchange support" }
+        ],
+        subtopics: [
+          { title: "Classical Cryptographic Foundations", detail: "RSA factoring hardness, Discrete Logarithm problem, Elliptic Curve Cryptography (ECDH, ECDSA), AES-GCM authenticated encryption." },
+          { title: "Quantum Threat & Shor's Algorithm", detail: "How Shor's algorithm polynomial-time breaks RSA and ECC, Grover's algorithm halving symmetric key security (AES-128 to 64-bit effective)." },
+          { title: "NIST Post-Quantum Cryptography Standards", detail: "ML-KEM (formerly Kyber, lattice-based KEM), ML-DSA (formerly Dilithium), SLH-DSA (stateless hash-based signatures), Hybrid key exchange (X25519 + ML-KEM)." }
+        ],
+        knowledgeAssessment: [
+          "Why does Shor's algorithm threaten public key algorithms like RSA and ECC, but not symmetric algorithms like AES-256?",
+          "Explain the concept of 'Harvest Now, Decrypt Later' (HNDL) and why it demands immediate migration planning.",
+          "How does a hybrid key exchange (e.g. X25519Kyber768) provide security even if one of the algorithms contains an undiscovered flaw?",
+          "What is Crypto-Agility and how should an enterprise design architectures to support rapid algorithm replacement?"
+        ]
+      },
+      {
+        id: "mod-36",
+        num: "36",
+        title: "Research, Reporting and Professional Leadership",
+        whyMatters: "Turn technical capability into reliable research, sound assessments and clear communication.",
+        topicsStr: "Research methodology; literature review; evidence quality; attribution confidence; reproducibility; technical writing; responsible disclosure; threat modelling; risk management; architecture review; programme design; Purple Team governance; executive communication; conference talks and publication.",
+        booksStr: "MITRE, CISA, vendor research, academic papers via Google Scholar/arXiv, NIST and professional reporting examples.",
+        coursesStr: "Hackers-Arise: CISSP, CCSP+, Security Awareness and Risk Management, Cyber Law and relevant leadership courses as supplementary material.",
+        practicalStr: "Publish an evidence-backed research article; present findings to a technical and non-technical audience; maintain a reproducible portfolio.",
+        deliverable: "Public research portfolio, presentation and final professional capstone.",
+        urls: [
+          { name: "Google Scholar", url: "https://scholar.google.com/" },
+          { name: "arXiv", url: "https://arxiv.org/" },
+          { name: "NIST CSF", url: "https://www.nist.gov/cyberframework" }
+        ],
+        tools: ["Obsidian", "Pandoc", "LaTeX / Typst", "Zotero", "Git"],
+        commands: [
+          { cmd: "pandoc report.md -o report.pdf --pdf-engine=xelatex --toc", desc: "Compile professional markdown research report into high-fidelity PDF" }
+        ],
+        subtopics: [
+          { title: "Rigorous Technical Research & Reproducibility", detail: "Literature review methodology, maintaining proof-of-concept integrity, responsible disclosure processes with CERT/CC and vendors." },
+          { title: "Executive Communication & Strategic Influence", detail: "Translating technical vulnerabilities into business impact, explaining residual risk to Board members, designing security roadmaps." },
+          { title: "Security Program Design & Purple Team Governance", detail: "Building continuous assessment programs, coordinating Red, Blue, and Architecture teams, establishing defense-in-depth." }
+        ],
+        knowledgeAssessment: [
+          "How do you communicate a critical zero-day vulnerability to an executive team without causing panic or misallocating resources?",
+          "Explain the steps and ethics of coordinated vulnerability disclosure (CVD).",
+          "What distinguishes reproducible scientific cybersecurity research from vendor marketing whitepapers?",
+          "How do you design a multi-year security program that balances immediate operational firefighting with long-term architectural defense?"
+        ]
+      }
+    ]
+  }
+];
+
+// Write dataset
+fs.writeFileSync('data_modules.json', JSON.stringify(phasesRaw, null, 2));
+console.log('Successfully generated data_modules.json with all 36 modules!');
