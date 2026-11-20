@@ -69,3 +69,4 @@ Then visit [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ## 📄 License
 MIT License. Created for educational, defensive, and authorized cybersecurity research.
+
